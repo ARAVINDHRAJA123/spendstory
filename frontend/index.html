@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="description" content="Understand your bank statement in seconds. Private — your data never leaves the moment.">
+<title>SpendStory — understand your money</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <button id="btn-history" class="btn-history" type="button" aria-label="Show past analyses">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path d="M12 8v4l3 2M21 12a9 9 0 1 1-3-6.7M21 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 13l3 3 5-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>SpendStory</span>
+    </div>
+  </div>
+  <span class="privacy-pill" title="Your statement is analysed and immediately discarded. Nothing is stored.">
+    🔒 Nothing is stored
+  </span>
+</header>
+
+<!-- ── Past analyses drawer (this device only) ── -->
+<div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+<aside id="drawer" class="drawer" aria-label="Past analyses">
+  <div class="drawer-head">
+    <h2>Past analyses</h2>
+    <button id="btn-clear-history" class="btn-mini" type="button">Clear all</button>
+  </div>
+  <p class="drawer-note">Saved only on this device, never on our servers. Clear anytime — especially on a shared computer.</p>
+  <ul id="history-list" class="history-list"></ul>
+  <p id="history-empty" class="drawer-empty">Nothing yet.<br>Analyse a statement and it'll appear here.</p>
+</aside>
+
+<button id="btn-theme" class="btn-theme" type="button" aria-label="Switch between dark and light mode">
+  <svg class="ico-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+    <circle cx="12" cy="12" r="4.6" fill="currentColor"/>
+    <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3L19 19M19 5l-1.7 1.7M6.7 17.3L5 19"/>
+    </g>
+  </svg>
+  <svg class="ico-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+    <path d="M20.6 14.2A8.8 8.8 0 0 1 9.8 3.4a8.8 8.8 0 1 0 10.8 10.8z" fill="currentColor"/>
+  </svg>
+</button>
+
+<!-- ── Upload screen ─────────────────────────────────────────── -->
+<main id="screen-upload" class="screen">
+  <section class="hero">
+    <h1>Your bank statement,<br><em>decoded in seconds</em></h1>
+    <p class="sub">Upload your statement PDF. See where your money goes — spending, categories, unusual charges. Private by design: we analyse and forget.</p>
+  </section>
+
+  <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload your bank statement PDF">
+    <svg viewBox="0 0 24 24" width="44" height="44" aria-hidden="true">
+      <path d="M12 16V4m0 0l-4 4m4-4l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <p class="dz-title">Tap to choose your statement</p>
+    <p class="dz-hint">or drag &amp; drop the PDF here</p>
+    <p class="dz-banks">Works with HDFC · SBI · Axis · PNB · IOB · CUB</p>
+    <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
+  </div>
+
+  <div id="password-row" class="password-row" hidden>
+    <label for="pdf-password">This PDF is locked. Enter its password:</label>
+    <div class="pw-line">
+      <input type="password" id="pdf-password" autocomplete="off" inputmode="text" placeholder="PDF password">
+      <button id="pw-submit" class="btn-primary">Unlock &amp; analyse</button>
+    </div>
+  </div>
+
+  <p id="upload-error" class="error" role="alert" hidden></p>
+
+  <section class="trust">
+    <div class="trust-item"><span>🔒</span><div><b>Private</b><small>Analysed in memory, deleted instantly</small></div></div>
+    <div class="trust-item"><span>⚡</span><div><b>Fast</b><small>Results in a few seconds</small></div></div>
+    <div class="trust-item"><span>🏦</span><div><b>6 banks</b><small>Auto-detected from your PDF</small></div></div>
+  </section>
+</main>
+
+<!-- ── Loading ───────────────────────────────────────────────── -->
+<div id="screen-loading" class="screen loading" hidden>
+  <div class="scanner"><div class="scan-line"></div>📄</div>
+  <p id="loading-msg">Reading your statement…</p>
+</div>
+
+<!-- ── Results ───────────────────────────────────────────────── -->
+<main id="screen-results" class="screen" hidden>
+  <div class="results-head">
+    <button id="btn-again" class="btn-ghost">← Analyse another</button>
+    <span id="bank-badge" class="bank-badge"></span>
+  </div>
+
+  <section class="cards">
+    <div class="card stat"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></div>
+    <div class="card stat"><small>Money in</small><b id="stat-income" class="pos">₹0</b></div>
+    <div class="card stat"><small>Net</small><b id="stat-net">₹0</b></div>
+    <div class="card stat"><small>Transactions</small><b id="stat-count">0</b></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h2>Where it went</h2><div class="chart-wrap"><canvas id="chart-cats"></canvas></div></div>
+    <div class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></div>
+  </section>
+
+  <section class="card" id="anomaly-card" hidden>
+    <h2>⚠️ Unusually large payments</h2>
+    <p class="muted">These are much bigger than your typical spend — worth a quick look.</p>
+    <ul id="anomaly-list" class="anomaly-list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Top places you paid</h2>
+    <ul id="merchant-list" class="merchant-list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>All transactions</h2>
+    <input type="search" id="txn-search" placeholder="Search — e.g. swiggy, rent…" aria-label="Search transactions">
+    <div class="txn-scroll"><table id="txn-table">
+      <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th class="num">Amount</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <footer class="foot">SpendStory · your statement was analysed in memory and has already been deleted.</footer>
+</main>
+
+<script src="vendor/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

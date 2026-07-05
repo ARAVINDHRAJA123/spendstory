@@ -1,0 +1,95 @@
+priority,category,keyword,requires_credit
+1,Salary / Income,salary,true
+1,Salary / Income,"sal ",true
+1,Salary / Income,payroll,true
+1,Salary / Income,income,true
+1,Salary / Income,stipend,true
+2,Food & Dining,adyar ananda,false
+2,Food & Dining,chai kings,false
+2,Food & Dining,tea time,false
+2,Food & Dining,hot chips,false
+2,Food & Dining,swiggy,false
+2,Food & Dining,zomato,false
+2,Food & Dining,dominos,false
+2,Food & Dining,pizza,false
+2,Food & Dining,kfc,false
+2,Food & Dining,mcdonalds,false
+2,Food & Dining,restaurant,false
+2,Food & Dining,cafe,false
+2,Food & Dining,food,false
+2,Food & Dining,biryani,false
+2,Food & Dining,eat,false
+2,Food & Dining,burger,false
+2,Food & Dining,starbucks,false
+3,Transport,uber,false
+3,Transport,ola,false
+3,Transport,rapido,false
+3,Transport,petrol,false
+3,Transport,fuel,false
+3,Transport,irctc,false
+3,Transport,bus,false
+3,Transport,metro,false
+3,Transport,parking,false
+3,Transport,toll,false
+3,Transport,flight,false
+3,Transport,indigo,false
+3,Transport,airasia,false
+3,Transport,redbus,false
+3,Transport,makemytrip,false
+4,Shopping,amazon pay groceries,false
+4,Shopping,max retail,false
+4,Shopping,amazon,false
+4,Shopping,flipkart,false
+4,Shopping,myntra,false
+4,Shopping,meesho,false
+4,Shopping,ajio,false
+4,Shopping,zepto,false
+4,Shopping,blinkit,false
+4,Shopping,bigbasket,false
+4,Shopping,nykaa,false
+5,Bills & Utilities,lazypay,false
+5,Bills & Utilities,jio,false
+5,Bills & Utilities,airtel,false
+5,Bills & Utilities,"vi ",false
+5,Bills & Utilities,bsnl,false
+5,Bills & Utilities,broadband,false
+5,Bills & Utilities,recharge,false
+5,Bills & Utilities,postpaid,false
+5,Bills & Utilities,dth,false
+5,Bills & Utilities,fasttag,false
+5,Bills & Utilities,electricity,false
+6,Health,pharmacy,false
+6,Health,medical,false
+6,Health,doctor,false
+6,Health,hospital,false
+6,Health,apollo,false
+6,Health,medplus,false
+6,Health,1mg,false
+6,Health,netmeds,false
+6,Health,diagnostic,false
+7,Insurance,icici lom,false
+7,Insurance,icici lombard,false
+7,Insurance,lic,false
+7,Insurance,insurance,false
+7,Insurance,bajaj allianz,false
+7,Insurance,hdfc ergo,false
+7,Insurance,star health,false
+8,Entertainment,netflix,false
+8,Entertainment,prime,false
+8,Entertainment,hotstar,false
+8,Entertainment,spotify,false
+8,Entertainment,bookmyshow,false
+8,Entertainment,inox,false
+8,Entertainment,pvr,false
+9,Finance & EMI,emi,false
+9,Finance & EMI,loan,false
+9,Finance & EMI,mutual fund,false
+9,Finance & EMI,sip,false
+9,Finance & EMI,nach,false
+9,Finance & EMI,ach,false
+9,Finance & EMI,ecs,false
+9,Finance & EMI,neft,false
+9,Finance & EMI,imps,false
+9,Finance & EMI,rtgs,false
+9,Finance & EMI,credit card,false
+9,Finance & EMI,bajaj,false
