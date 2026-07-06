@@ -3,7 +3,7 @@
    instantly and works offline; NEVER cache /api responses — financial
    results must stay in memory only. */
 
-const CACHE = "spendstory-v3";
+const CACHE = "spendstory-v4";
 const SHELL = [
   ".",
   "index.html",

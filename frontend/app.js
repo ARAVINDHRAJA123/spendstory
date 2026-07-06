@@ -7,7 +7,7 @@
 const $ = (id) => document.getElementById(id);
 const screens = { upload: $("screen-upload"), loading: $("screen-loading"), results: $("screen-results") };
 
-let pendingFile = null;   // kept only in browser memory for the password retry
+let pendingFiles = [];   // kept only in browser memory for the password retry
 let charts = [];
 let lastRenderedData = null; // re-drawn on theme change so chart text colour stays readable
 
@@ -33,32 +33,36 @@ const fileInput = $("file-input");
 
 dz.addEventListener("click", () => fileInput.click());
 dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
-fileInput.addEventListener("change", () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFiles([...fileInput.files]); });
 
 ["dragover", "dragenter"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add("dragover"); }));
 ["dragleave", "drop"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.remove("dragover"); }));
-dz.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+dz.addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files]; if (fs.length) handleFiles(fs); });
 
 $("pw-submit").addEventListener("click", () => {
-  if (pendingFile) analyse(pendingFile, $("pdf-password").value);
+  if (pendingFiles.length === 1) analyse(pendingFiles[0], $("pdf-password").value);
+  else if (pendingFiles.length > 1) analyseMulti(pendingFiles, $("pdf-password").value);
 });
 $("pdf-password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pw-submit").click(); });
 
 $("btn-again").addEventListener("click", () => {
   fileInput.value = "";
-  pendingFile = null;
+  pendingFiles = [];
   $("password-row").hidden = true;
   $("pdf-password").value = "";
   setError("");
   show("upload");
 });
 
-function handleFile(file) {
+function handleFiles(fileList) {
   setError("");
-  if (!/\.pdf$/i.test(file.name)) return setError("Please choose a PDF file — the statement you downloaded from your bank.");
-  if (file.size > 15 * 1024 * 1024) return setError("That file is bigger than 15 MB. Try a statement for a shorter period.");
-  pendingFile = file;
-  analyse(file, $("pdf-password").value);
+  for (const f of fileList) {
+    if (!/\.pdf$/i.test(f.name)) return setError(`"${f.name}" isn't a PDF — please choose bank statement PDFs.`);
+    if (f.size > 15 * 1024 * 1024) return setError(`"${f.name}" is bigger than 15 MB.`);
+  }
+  pendingFiles = fileList;
+  if (fileList.length === 1) analyse(fileList[0], $("pdf-password").value);
+  else analyseMulti(fileList, $("pdf-password").value);
 }
 
 /* ── API call ──────────────────────────────────────────────── */
@@ -87,6 +91,38 @@ async function analyse(file, password) {
     }
     // Show the screen BEFORE drawing: Chart.js needs visible (non-zero)
     // containers to size the canvases correctly.
+    show("results");
+    render(body);
+    addToHistory(body);
+  } catch {
+    show("upload");
+    setError("Couldn't reach the server. Check your internet connection and try again.");
+  } finally {
+    clearInterval(ticker);
+  }
+}
+
+async function analyseMulti(files, password) {
+  show("loading");
+  let i = 0;
+  const ticker = setInterval(() => { $("loading-msg").textContent = LOADING_MSGS[++i % LOADING_MSGS.length]; }, 1600);
+
+  try {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    form.append("password", password || "");
+    const res = await fetch("api/analyse-multi", { method: "POST", body: form });
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      show("upload");
+      const msg = body.detail || "Something went wrong. Please try again.";
+      if (/password/i.test(msg)) {
+        $("password-row").hidden = false;
+        $("pdf-password").focus();
+      }
+      return setError(msg);
+    }
     show("results");
     render(body);
     addToHistory(body);

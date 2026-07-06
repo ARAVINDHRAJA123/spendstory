@@ -103,16 +103,29 @@ def _decrypt_if_needed(path: str, password: str | None) -> None:
         writer.write(f)
 
 
-@app.post("/api/analyse")
-async def analyse_statement(request: Request, file: UploadFile = File(...), password: str = Form(default="")):
-    if _rate_limited(_client_ip(request)):
-        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
-    blob = await file.read()
+def _txn(r):
+    return {
+        "date": r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"]),
+        "narration": r["narration"],
+        "merchant": r["merchant"],
+        "category": r["category"],
+        "debit": r["debit"],
+        "credit": r["credit"],
+        "balance": r["balance"],
+        "is_anomaly": bool(r.get("is_anomaly")),
+        "source_bank": r.get("source_bank", ""),
+    }
 
+
+def _parse_one(blob: bytes, password: str, label: str = "") -> dict:
+    """Validate, decrypt, and parse a single statement PDF. Raises
+    HTTPException on any user-facing failure. `label` is only used to make
+    error messages identify which file failed in a multi-file batch."""
+    prefix = f"{label}: " if label else ""
     if len(blob) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "File is larger than 15 MB. Please upload a smaller statement.")
+        raise HTTPException(413, f"{prefix}File is larger than 15 MB. Please upload a smaller statement.")
     if not blob.startswith(b"%PDF"):
-        raise HTTPException(415, "That file isn't a PDF. Please upload your bank statement PDF.")
+        raise HTTPException(415, f"{prefix}That file isn't a PDF. Please upload your bank statement PDF.")
 
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
     try:
@@ -124,60 +137,81 @@ async def analyse_statement(request: Request, file: UploadFile = File(...), pass
             import pdfplumber as _pp
             with _pp.open(tmp.name) as _pdf:
                 if len(_pdf.pages) > MAX_PDF_PAGES:
-                    raise HTTPException(422, f"This statement has more than {MAX_PDF_PAGES} pages. Please upload a shorter period.")
-            # Run parsing with a hard timeout so a crafted PDF can't hang the worker.
+                    raise HTTPException(422, f"{prefix}This statement has more than {MAX_PDF_PAGES} pages. Please upload a shorter period.")
             future = _parse_pool.submit(extract_transactions, tmp.name)
             try:
                 raw = future.result(timeout=PARSE_TIMEOUT_S)
             except FutureTimeout:
                 future.cancel()
-                raise HTTPException(422, "This PDF took too long to read. It may be malformed — try re-downloading it from your bank.")
+                raise HTTPException(422, f"{prefix}This PDF took too long to read. It may be malformed — try re-downloading it from your bank.")
         except HTTPException:
             raise
         except ValueError:
-            raise HTTPException(
-                422,
-                "Couldn't recognise this bank. Supported: HDFC, CUB, IOB, PNB, SBI text statements.",
-            )
+            raise HTTPException(422, f"{prefix}Couldn't recognise this bank. Supported: HDFC, SBI, Axis, PNB, IOB, CUB text statements.")
         except Exception:
-            # Corrupt or malformed PDF — anything the parsers can't open.
-            raise HTTPException(422, "This PDF couldn't be read. It may be damaged — try downloading it from your bank again.")
+            raise HTTPException(422, f"{prefix}This PDF couldn't be read. It may be damaged — try downloading it from your bank again.")
         if not raw:
-            raise HTTPException(422, "No transactions found — is this a scanned/image PDF? Only text statements are supported.")
+            raise HTTPException(422, f"{prefix}No transactions found — is this a scanned/image PDF? Only text statements are supported.")
 
+        bank = detect_bank(tmp.name)
         rows = clean_and_enrich(raw)
-        # detect_anomalies returns the flagged rows; mark them so the
-        # transaction list carries the flag too.
+        for r in rows:
+            r["source_bank"] = bank
         for r in detect_anomalies(rows):
             r["is_anomaly"] = True
-
-        def txn(r):
-            return {
-                "date": r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"]),
-                "narration": r["narration"],
-                "merchant": r["merchant"],
-                "category": r["category"],
-                "debit": r["debit"],
-                "credit": r["credit"],
-                "balance": r["balance"],
-                "is_anomaly": bool(r.get("is_anomaly")),
-            }
-
-        return JSONResponse({
-            "bank": detect_bank(tmp.name),
-            "stats": spending_stats(rows),
-            "monthly": monthly_summary(rows),
-            "categories": category_summary(rows),
-            "merchants": top_merchants(rows),
-            "anomalies": [txn(r) for r in rows if r.get("is_anomaly")],
-            "transactions": [txn(r) for r in rows],
-        })
+        return {"bank": bank, "rows": rows}
     finally:
-        # Privacy guarantee: the statement never outlives the request.
         try:
             os.unlink(tmp.name)
         except OSError:
             pass
+
+
+def _bundle(rows: list[dict], banks: list[str]) -> dict:
+    return {
+        "bank": " + ".join(dict.fromkeys(banks)) if len(set(banks)) > 1 else (banks[0] if banks else "UNKNOWN"),
+        "banks": list(dict.fromkeys(banks)),
+        "stats": spending_stats(rows),
+        "monthly": monthly_summary(rows),
+        "categories": category_summary(rows),
+        "merchants": top_merchants(rows),
+        "anomalies": [_txn(r) for r in rows if r.get("is_anomaly")],
+        "transactions": [_txn(r) for r in sorted(rows, key=lambda r: r["date"])],
+    }
+
+
+@app.post("/api/analyse")
+async def analyse_statement(request: Request, file: UploadFile = File(...), password: str = Form(default="")):
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
+    blob = await file.read()
+    result = _parse_one(blob, password)
+    return JSONResponse(_bundle(result["rows"], [result["bank"]]))
+
+
+@app.post("/api/analyse-multi")
+async def analyse_multi(request: Request, files: list[UploadFile] = File(...), password: str = Form(default="")):
+    """Merge 2+ statements (e.g. different banks) into one unified view.
+    A single shared password is tried against every file; a statement that
+    needs a different password fails with a clear per-file message —
+    analyse it alone via /api/analyse, then merging isn't supported for it
+    in this v1 (documented limitation, not a silent bug)."""
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
+    if len(files) < 2:
+        raise HTTPException(422, "Upload 2 or more statements to merge them.")
+    if len(files) > 6:
+        raise HTTPException(422, "Please merge at most 6 statements at a time.")
+
+    all_rows: list[dict] = []
+    banks: list[str] = []
+    for f in files:
+        blob = await f.read()
+        result = _parse_one(blob, password, label=f.filename or "file")
+        all_rows.extend(result["rows"])
+        banks.append(result["bank"])
+
+    return JSONResponse(_bundle(all_rows, banks))
 
 
 @app.get("/healthz")

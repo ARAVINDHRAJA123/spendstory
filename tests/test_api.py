@@ -38,3 +38,27 @@ def test_security_headers():
     r = client.get("/")
     assert r.headers["X-Frame-Options"] == "DENY"
     assert "default-src 'self'" in r.headers["Content-Security-Policy"]
+
+
+def test_analyse_multi_rejects_single_file():
+    r = client.post("/api/analyse-multi",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data={"password": ""})
+    assert r.status_code == 422 and "2 or more" in r.json()["detail"]
+
+
+def test_analyse_multi_rejects_too_many():
+    files = [("files", (f"{i}.pdf", b"%PDF-1", "application/pdf")) for i in range(7)]
+    r = client.post("/api/analyse-multi", files=files, data={"password": ""})
+    assert r.status_code == 422 and "at most 6" in r.json()["detail"]
+
+
+def test_analyse_multi_labels_failing_file():
+    # First file is a non-PDF so it fails immediately with a labeled message.
+    files = [
+        ("files", ("bad.txt", b"hello", "application/pdf")),
+        ("files", ("other.pdf", b"%PDF-1", "application/pdf")),
+    ]
+    r = client.post("/api/analyse-multi", files=files, data={"password": ""})
+    assert r.status_code == 415
+    assert "bad.txt" in r.json()["detail"]
