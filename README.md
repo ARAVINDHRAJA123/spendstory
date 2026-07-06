@@ -2,7 +2,7 @@
 
 **Your bank statement, decoded in seconds.**
 
-[![CI](https://github.com/ARAVINDHRAJA123/spendstory/actions/workflows/ci.yml/badge.svg)](https://github.com/ARAVINDHRAJA123/spendstory/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/ARAVINDHRAJA123/spendstory/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/ARAVINDHRAJA123/spendstory/actions)
 [![Live App](https://img.shields.io/badge/Live_App-spendstory.run.app-7c3aed?style=for-the-badge&logo=googlecloud&logoColor=white)](https://spendstory-616665622891.asia-south1.run.app)
 [![PWA](https://img.shields.io/badge/PWA-Installable-d946ef?style=for-the-badge&logo=pwa&logoColor=white)](#-install-it-like-an-app)
 [![Privacy](https://img.shields.io/badge/Privacy-Nothing_Stored-10b981?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#-privacy-by-design)
@@ -42,6 +42,7 @@ The headline feature is what it **doesn't** do:
 - "Past analyses" live in *your browser's* localStorage — one tap clears them
 - Strict security headers: CSP (`'self'` only — zero third-party scripts), `nosniff`, frame-deny, no-referrer
 - The service worker explicitly never caches `/api` responses
+- Abuse protection: per-IP rate limiting, 80-page/15 MB caps, 60 s parse timeout, capped Cloud Run instances
 
 ## 🏗 Architecture
 
