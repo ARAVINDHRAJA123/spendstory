@@ -13,6 +13,9 @@ Security model (privacy by design):
 import os
 import sys
 import tempfile
+import time
+from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -31,6 +34,32 @@ from analyser import (  # noqa: E402
 )
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
+MAX_PDF_PAGES = 80          # statements rarely exceed this; caps CPU per request
+PARSE_TIMEOUT_S = 60        # a pathological PDF can't hold a worker hostage
+RATE_LIMIT = 20             # analyses per IP per window
+RATE_WINDOW_S = 600
+
+_hits: dict[str, deque] = defaultdict(deque)
+_parse_pool = ThreadPoolExecutor(max_workers=4)
+
+
+def _rate_limited(ip: str) -> bool:
+    """Sliding-window per-IP limit. In-memory is fine: Cloud Run instances are
+    capped, so worst case the effective limit is N-instances x RATE_LIMIT."""
+    now = time.monotonic()
+    q = _hits[ip]
+    while q and now - q[0] > RATE_WINDOW_S:
+        q.popleft()
+    if len(q) >= RATE_LIMIT:
+        return True
+    q.append(now)
+    return False
+
+
+def _client_ip(request: Request) -> str:
+    # Cloud Run puts the real client IP first in X-Forwarded-For.
+    fwd = request.headers.get("x-forwarded-for")
+    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
 
 app = FastAPI(title="SpendStory", docs_url=None, redoc_url=None, openapi_url=None)
@@ -75,7 +104,9 @@ def _decrypt_if_needed(path: str, password: str | None) -> None:
 
 
 @app.post("/api/analyse")
-async def analyse_statement(file: UploadFile = File(...), password: str = Form(default="")):
+async def analyse_statement(request: Request, file: UploadFile = File(...), password: str = Form(default="")):
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
     blob = await file.read()
 
     if len(blob) > MAX_UPLOAD_BYTES:
@@ -90,7 +121,17 @@ async def analyse_statement(file: UploadFile = File(...), password: str = Form(d
 
         try:
             _decrypt_if_needed(tmp.name, password.strip() or None)
-            raw = extract_transactions(tmp.name)
+            import pdfplumber as _pp
+            with _pp.open(tmp.name) as _pdf:
+                if len(_pdf.pages) > MAX_PDF_PAGES:
+                    raise HTTPException(422, f"This statement has more than {MAX_PDF_PAGES} pages. Please upload a shorter period.")
+            # Run parsing with a hard timeout so a crafted PDF can't hang the worker.
+            future = _parse_pool.submit(extract_transactions, tmp.name)
+            try:
+                raw = future.result(timeout=PARSE_TIMEOUT_S)
+            except FutureTimeout:
+                future.cancel()
+                raise HTTPException(422, "This PDF took too long to read. It may be malformed — try re-downloading it from your bank.")
         except HTTPException:
             raise
         except ValueError:

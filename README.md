@@ -2,6 +2,7 @@
 
 **Your bank statement, decoded in seconds.**
 
+[![CI](https://github.com/ARAVINDHRAJA123/spendstory/actions/workflows/ci.yml/badge.svg)](https://github.com/ARAVINDHRAJA123/spendstory/actions)
 [![Live App](https://img.shields.io/badge/Live_App-spendstory.run.app-7c3aed?style=for-the-badge&logo=googlecloud&logoColor=white)](https://spendstory-616665622891.asia-south1.run.app)
 [![PWA](https://img.shields.io/badge/PWA-Installable-d946ef?style=for-the-badge&logo=pwa&logoColor=white)](#-install-it-like-an-app)
 [![Privacy](https://img.shields.io/badge/Privacy-Nothing_Stored-10b981?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#-privacy-by-design)
