@@ -222,7 +222,14 @@ BANK_SIGNATURES = {
     "CUB":  ["CITY UNION BANK"],
     "IOB":  ["INDIAN OVERSEAS BANK"],
     "PNB":  ["PUNJAB NATIONAL BANK"],
-    "SBI":  ["STATE BANK OF INDIA"],
+    # "STATE BANK OF INDIA" often isn't present as extractable text at all on
+    # the "Account Summary" layout (the header/logo area renders as an image,
+    # not real text) — "DRAWING POWER"/"UNCLEARED AMOUNT" are SBI-specific
+    # passbook field labels that reliably appear in that layout's account
+    # summary block instead, and must be listed before "HDFC" below since a
+    # UPI counterparty mention of "HDFC" in a transaction narration would
+    # otherwise false-positive-match first.
+    "SBI":  ["STATE BANK OF INDIA", "DRAWING POWER", "UNCLEARED AMOUNT"],
     # Specific phrase, not just "AXIS BANK" — that string also appears as a
     # UPI counterparty bank name in other banks' statements (false-positive risk).
     "AXIS": ["STATEMENT OF AXIS ACCOUNT"],
@@ -241,14 +248,9 @@ BANK_SIGNATURES = {
 # (e.g. an Axis statement's UPI narrations naming "State Bank Of India").
 _TABLE_START_MARKERS = ("TRAN DATE", "TXN DATE", "VALUE DATE", "OPENING BALANCE")
 
-def detect_bank(pdf_path: str) -> str:
-    """Identify the issuing bank from name or structural markers across all pages."""
-    with pdfplumber.open(pdf_path) as pdf:
-        # Scan up to 2 pages for robustness
-        text = " ".join(
-            (page.extract_text() or "") for page in pdf.pages[:2]
-        ).upper()
-
+def _match_bank_signature(text: str) -> str:
+    """Pure matching logic over already-uppercased text, split out from
+    detect_bank() so it's unit-testable without a real PDF fixture."""
     # Pass 1: header only (before the transaction table) — avoids false
     # matches from counterparty bank names inside transaction narrations.
     cut_points = [text.find(m) for m in _TABLE_START_MARKERS if m in text]
@@ -265,6 +267,16 @@ def detect_bank(pdf_path: str) -> str:
         if any(sig in text for sig in sigs):
             return real_bank
     return "UNKNOWN"
+
+
+def detect_bank(pdf_path: str) -> str:
+    """Identify the issuing bank from name or structural markers across all pages."""
+    with pdfplumber.open(pdf_path) as pdf:
+        # Scan up to 2 pages for robustness
+        text = " ".join(
+            (page.extract_text() or "") for page in pdf.pages[:2]
+        ).upper()
+    return _match_bank_signature(text)
 
 # ── CUB (City Union Bank) — word-based ────────────────────────────────────────
 # Each transaction spans 2–3 sub-lines ~5px apart (narration / date+amounts /

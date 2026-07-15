@@ -8,7 +8,8 @@ from openpyxl import load_workbook
 
 from analyser import (parse_date, parse_amount, extract_merchant, assign_category,
                       detect_anomalies, monthly_summary, category_summary,
-                      top_merchants, spending_stats, clean_and_enrich, export_excel)
+                      top_merchants, spending_stats, clean_and_enrich, export_excel,
+                      _match_bank_signature)
 
 
 def row(d, narration="x", debit=0.0, credit=0.0, balance=0.0, merchant="m", category="c"):
@@ -123,3 +124,23 @@ def test_export_excel_handles_rows_without_ref_no():
     buf.seek(0)
     wb = load_workbook(buf)
     assert wb["Transactions"].max_row == 2
+
+
+def test_detect_bank_sbi_account_summary_layout_not_misdetected_as_hdfc():
+    # Real-world bug: SBI's "Account Summary" layout renders its table header
+    # ("Value Date", "Post Date", ...) as non-text, so _TABLE_START_MARKERS
+    # never cuts off the header — the full text (including narrations) gets
+    # scanned, and a UPI counterparty narration mentioning "HDFC" used to
+    # false-positive-match before any SBI signature was found.
+    text = """
+    WELCOME MR SIVASUBRAMANIAN ACCOUNT SUMMARY
+    CLEAR BALANCE : 2,827.68CR UNCLEARED AMOUNT : 0.00
+    DRAWING POWER : 0.00
+    01/04/2026 01/04/2026 UPI/DR/609255813673/MANOJBA/HDFC/mr.manojba/UPI 95.00 - 226.74
+    """.upper()
+    assert _match_bank_signature(text) == "SBI"
+
+
+def test_detect_bank_still_finds_hdfc_when_genuinely_hdfc():
+    text = "HDFC BANK STATEMENT OF ACCOUNT VALUE DATE NARRATION DEBIT CREDIT"
+    assert _match_bank_signature(text) == "HDFC"
