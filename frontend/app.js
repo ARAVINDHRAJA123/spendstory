@@ -256,7 +256,10 @@ function buildCharts(d) {
       animation: { animateRotate: true, duration: 900, easing: "easeOutCubic" },
       plugins: {
         legend: { position: "right", labels: { boxWidth: 14, boxHeight: 14, padding: 10 } },
-        tooltip: { callbacks: { label: (c) => " " + INR.format(c.parsed) } },
+        // caretSize: 0 — Chart.js's default tooltip arrow is positioned for
+        // bar/line charts; on a doughnut it points from the arc's centroid
+        // and renders as a disconnected floating triangle near the edge.
+        tooltip: { caretSize: 0, cornerRadius: 8, padding: 10, callbacks: { label: (c) => " " + INR.format(c.parsed) } },
       },
     },
   }));
