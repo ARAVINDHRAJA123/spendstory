@@ -10,6 +10,7 @@ Security model (privacy by design):
   * Every response carries strict security headers (CSP, no-sniff, etc.).
 """
 
+import io
 import os
 import sys
 import tempfile
@@ -18,7 +19,7 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,6 +28,7 @@ from analyser import (  # noqa: E402
     clean_and_enrich,
     detect_anomalies,
     detect_bank,
+    export_excel,
     extract_transactions,
     monthly_summary,
     spending_stats,
@@ -212,6 +214,41 @@ async def analyse_multi(request: Request, files: list[UploadFile] = File(...), p
         banks.append(result["bank"])
 
     return JSONResponse(_bundle(all_rows, banks))
+
+
+@app.post("/api/export-excel")
+async def export_excel_report(request: Request, files: list[UploadFile] = File(...), password: str = Form(default="")):
+    """Re-parses the uploaded statement(s) (stateless, same privacy model as
+    /api/analyse) and streams back a multi-sheet Excel report — summary,
+    transactions, monthly/category/merchant breakdowns, anomalies. Nothing
+    is written to disk; the workbook is built entirely in memory."""
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
+    if not files:
+        raise HTTPException(422, "Upload a statement to export.")
+    if len(files) > 6:
+        raise HTTPException(422, "Please export at most 6 statements at a time.")
+
+    all_rows: list[dict] = []
+    for f in files:
+        blob = await f.read()
+        result = _parse_one(blob, password, label=f.filename or "file")
+        all_rows.extend(result["rows"])
+
+    monthly   = monthly_summary(all_rows)
+    cats      = category_summary(all_rows)
+    merchants = top_merchants(all_rows)
+    anomalies = [r for r in all_rows if r.get("is_anomaly")]
+    stats     = spending_stats(all_rows)
+
+    buf = io.BytesIO()
+    export_excel(all_rows, monthly, cats, merchants, anomalies, stats, buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=SpendStory_Report.xlsx"},
+    )
 
 
 @app.get("/healthz")

@@ -53,6 +53,24 @@ def test_analyse_multi_rejects_too_many():
     assert r.status_code == 422 and "at most 6" in r.json()["detail"]
 
 
+def test_export_excel_rejects_empty():
+    r = client.post("/api/export-excel", files=[], data={"password": ""})
+    assert r.status_code == 422
+
+
+def test_export_excel_rejects_too_many():
+    files = [("files", (f"{i}.pdf", b"%PDF-1", "application/pdf")) for i in range(7)]
+    r = client.post("/api/export-excel", files=files, data={"password": ""})
+    assert r.status_code == 422 and "at most 6" in r.json()["detail"]
+
+
+def test_export_excel_rejects_non_pdf():
+    r = client.post("/api/export-excel",
+                    files=[("files", ("a.txt", b"hello", "application/pdf"))],
+                    data={"password": ""})
+    assert r.status_code == 415
+
+
 def test_analyse_multi_labels_failing_file():
     # First file is a non-PDF so it fails immediately with a labeled message.
     files = [

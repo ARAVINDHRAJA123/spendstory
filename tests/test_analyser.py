@@ -1,16 +1,20 @@
 """SpendStory unit tests — pure-function coverage, no real bank data needed."""
+import io
 import sys, os
 from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+from openpyxl import load_workbook
+
 from analyser import (parse_date, parse_amount, extract_merchant, assign_category,
                       detect_anomalies, monthly_summary, category_summary,
-                      top_merchants, spending_stats, clean_and_enrich)
+                      top_merchants, spending_stats, clean_and_enrich, export_excel)
 
 
 def row(d, narration="x", debit=0.0, credit=0.0, balance=0.0, merchant="m", category="c"):
     return {"date": d, "narration": narration, "debit": debit, "credit": credit,
-            "balance": balance, "merchant": merchant, "category": category, "is_anomaly": False}
+            "balance": balance, "merchant": merchant, "category": category, "is_anomaly": False,
+            "ref_no": "", "value_date": d}
 
 
 def test_parse_date_formats():
@@ -82,3 +86,24 @@ def test_clean_and_enrich_dedupes_and_sorts():
     assert len(out) == 2
     assert out[0]["date"] < out[1]["date"]
     assert out[1]["merchant"] == "Swiggy"
+
+
+def test_export_excel_produces_valid_workbook():
+    rows = [
+        row(date(2026, 1, 5), narration="UPI-SWIGGY-SWIGGY@YBL-1", debit=100.0, merchant="Swiggy", category="Food"),
+        row(date(2026, 1, 6), narration="NEFT-SALARY", credit=50000.0, merchant="Employer", category="Salary"),
+        row(date(2026, 1, 20), narration="UPI-BIGSPEND", debit=40000.0, merchant="BigSpend", category="Shopping"),
+    ]
+    anomalies = detect_anomalies(rows)
+    for r in anomalies:
+        r["is_anomaly"] = True
+    monthly, cats, merchants = monthly_summary(rows), category_summary(rows), top_merchants(rows)
+    stats = spending_stats(rows)
+
+    buf = io.BytesIO()
+    export_excel(rows, monthly, cats, merchants, anomalies, stats, buf)
+    buf.seek(0)
+
+    wb = load_workbook(buf)
+    assert {"Summary", "Transactions", "Monthly Summary", "Categories", "Top Merchants", "Anomalies"} <= set(wb.sheetnames)
+    assert wb["Transactions"].max_row >= len(rows) + 1  # +1 header row
