@@ -107,3 +107,19 @@ def test_export_excel_produces_valid_workbook():
     wb = load_workbook(buf)
     assert {"Summary", "Transactions", "Monthly Summary", "Categories", "Top Merchants", "Anomalies"} <= set(wb.sheetnames)
     assert wb["Transactions"].max_row >= len(rows) + 1  # +1 header row
+
+
+def test_export_excel_handles_rows_without_ref_no():
+    # Axis's extractor (_extract_axis) never sets ref_no/value_date, unlike
+    # every other bank's extractor — export must not KeyError on that.
+    rows = [{"date": date(2026, 1, 5), "narration": "NEFT/XYZ/PAYEE", "debit": 50.0,
+             "credit": 0.0, "balance": 950.0, "merchant": "Payee", "category": "Other Expense",
+             "is_anomaly": False}]
+    monthly, cats, merchants = monthly_summary(rows), category_summary(rows), top_merchants(rows)
+    stats = spending_stats(rows)
+
+    buf = io.BytesIO()
+    export_excel(rows, monthly, cats, merchants, [], stats, buf)  # must not raise
+    buf.seek(0)
+    wb = load_workbook(buf)
+    assert wb["Transactions"].max_row == 2
