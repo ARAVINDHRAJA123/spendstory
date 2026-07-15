@@ -134,6 +134,43 @@ async function analyseMulti(files, password) {
   }
 }
 
+/* ── Excel export ──────────────────────────────────────────── */
+$("btn-export").addEventListener("click", async () => {
+  if (!pendingFiles.length) return;
+  const btn = $("btn-export");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Preparing…";
+  $("export-error").hidden = true;
+
+  try {
+    const form = new FormData();
+    for (const f of pendingFiles) form.append("files", f);
+    form.append("password", $("pdf-password").value || "");
+    const res = await fetch("api/export-excel", { method: "POST", body: form });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Couldn't generate the report.");
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "SpendStory_Report.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    const el = $("export-error");
+    el.hidden = false;
+    el.textContent = e.message || "Couldn't reach the server. Please try again.";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
 /* ── Rendering ─────────────────────────────────────────────── */
 function countUp(el, target, formatter) {
   const dur = 900, t0 = performance.now();
