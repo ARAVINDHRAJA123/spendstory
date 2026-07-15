@@ -961,9 +961,8 @@ def write_monthly(wb, monthly):
         chart.type, chart.grouping = "col", "clustered"
         chart.title = "Monthly Income vs Expense"
         chart.y_axis.title  = "Amount (Rs.)"
-        chart.x_axis.title  = "Month"
         chart.y_axis.numFmt = "#,##0"
-        chart.width, chart.height, chart.style = 26, 14, 10
+        chart.width, chart.height = 26, 14
         chart.add_data(Reference(ws, min_col=2, min_row=1, max_row=last), titles_from_data=True)
         chart.add_data(Reference(ws, min_col=3, min_row=1, max_row=last), titles_from_data=True)
         chart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=last))
@@ -992,7 +991,7 @@ def write_categories(wb, cats):
         last = len(cats) + 1
         pie = PieChart()
         pie.title = "Spending by Category"
-        pie.width, pie.height, pie.style = 18, 12, 10
+        pie.width, pie.height = 18, 12
         pie.add_data(Reference(ws, min_col=2, min_row=1, max_row=last), titles_from_data=True)
         pie.set_categories(Reference(ws, min_col=1, min_row=2, max_row=last))
         ws.add_chart(pie, "E2")
@@ -1011,11 +1010,10 @@ def write_merchants(wb, merchants):
         bar = BarChart()
         bar.type  = "bar"
         bar.title = "Top Merchants by Spend"
-        bar.y_axis.title = "Merchant"
         bar.x_axis.title = "Amount Spent (Rs.)"
         bar.x_axis.numFmt = "#,##0"
         bar.x_axis.majorGridlines = None
-        bar.width, bar.height, bar.style = 28, 18, 10
+        bar.width, bar.height = 28, 18
         bar.add_data(Reference(ws, min_col=2, min_row=1, max_row=last), titles_from_data=True)
         bar.set_categories(Reference(ws, min_col=1, min_row=2, max_row=last))
         bar.series[0].graphicalProperties.solidFill = C_BLUE
