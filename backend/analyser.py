@@ -855,15 +855,22 @@ BDR    = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 INR    = '₹#,##0.00'
 DTEFMT = 'DD/MM/YYYY'
 
-def hdr(ws, row, col, value, width=None):
+def hdr(ws, row, col, value, width=None, fill=C_NAVY):
     c = ws.cell(row=row, column=col, value=value)
     c.font      = Font(name="Arial", bold=True, color=C_WHITE, size=10)
-    c.fill      = PatternFill("solid", fgColor=C_NAVY)
+    c.fill      = PatternFill("solid", fgColor=fill)
     c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     c.border    = BDR
     if width:
         ws.column_dimensions[get_column_letter(col)].width = width
     return c
+
+def autofit_col(ws, col, min_width=10, max_width=60):
+    """Widen a column to fit its longest value, capped so one long UPI
+    narration or merchant name can't blow out the whole sheet layout."""
+    letter = get_column_letter(col)
+    max_len = max((len(str(c.value)) for c in ws[letter] if c.value is not None), default=0)
+    ws.column_dimensions[letter].width = max(min(max_len + 3, max_width), min_width)
 
 def dc(ws, row, col, value, fmt=None, bold=False, color=None, bg=None):
     c = ws.cell(row=row, column=col, value=value)
@@ -934,6 +941,8 @@ def write_transactions(wb, rows):
            bold=is_anom, color=C_WARN_T if is_anom else None, bg=bg)
 
     ws.auto_filter.ref = "A1:J1"
+    autofit_col(ws, 2)  # Merchant
+    autofit_col(ws, 3)  # Narration
 
 def write_monthly(wb, monthly):
     ws = wb.create_sheet("Monthly Summary")
@@ -1033,8 +1042,9 @@ def write_anomalies(wb, anomalies, all_rows):
     n_debits = len(s["debits"])
 
     title_cell = ws.cell(row=1, column=1,
-        value="Unusual Transactions — These payments are much larger than normal")
-    title_cell.font = Font(name="Arial", bold=True, size=12, color=C_WARN_T)
+        value="Unusual Transactions — These payments are much larger than normal (click to jump to all transactions)")
+    title_cell.font = Font(name="Arial", bold=True, size=12, color=C_WARN_T, underline="single")
+    title_cell.hyperlink = "#'Transactions'!A1"
     ws.merge_cells("A1:E1")
     ws.row_dimensions[1].height = 20
 
@@ -1066,7 +1076,7 @@ def write_anomalies(wb, anomalies, all_rows):
     for i, (h, w) in enumerate([("Date",12),("Who was paid",28),
                                   ("Full narration",44),
                                   ("Amount paid (Rs.)",18),("Category",22)], 1):
-        hdr(ws, 7, i, h)
+        hdr(ws, 7, i, h, fill=C_WARN_T)
 
     # ── Data rows ────────────────────────────────────────────────────────────
     for idx, r in enumerate(anomalies, 8):

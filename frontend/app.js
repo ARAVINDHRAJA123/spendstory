@@ -49,6 +49,7 @@ $("btn-again").addEventListener("click", () => {
   fileInput.value = "";
   pendingFiles = [];
   $("password-row").hidden = true;
+  $("trust-strip").hidden = false;
   $("pdf-password").value = "";
   setError("");
   show("upload");
@@ -85,6 +86,7 @@ async function analyse(file, password) {
       const msg = body.detail || "Something went wrong. Please try again.";
       if (/password/i.test(msg)) {
         $("password-row").hidden = false;
+        $("trust-strip").hidden = true;
         $("pdf-password").focus();
       }
       return setError(msg);
@@ -119,6 +121,7 @@ async function analyseMulti(files, password) {
       const msg = body.detail || "Something went wrong. Please try again.";
       if (/password/i.test(msg)) {
         $("password-row").hidden = false;
+        $("trust-strip").hidden = true;
         $("pdf-password").focus();
       }
       return setError(msg);
@@ -235,7 +238,13 @@ function buildCharts(d) {
   Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif";
   Chart.defaults.font.size = 13;
 
-  const cats = d.categories.filter((c) => c.spend > 0).slice(0, 8);
+  let cats = d.categories.filter((c) => c.spend > 0);
+  if (cats.length > 6) {
+    const visible = cats.slice(0, 6);
+    const otherSpend = cats.slice(6).reduce((sum, c) => sum + c.spend, 0);
+    visible.push({ category: "Other", spend: otherSpend });
+    cats = visible;
+  }
   charts.push(new Chart($("chart-cats"), {
     type: "doughnut",
     data: {
@@ -252,13 +261,23 @@ function buildCharts(d) {
     },
   }));
 
+  const barGradient = (topColor, bottomColor) => (ctx) => {
+    const { chartArea } = ctx.chart;
+    if (!chartArea) return topColor;
+    const g = ctx.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, topColor);
+    g.addColorStop(1, bottomColor);
+    return g;
+  };
+  const topRadius = { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 };
+
   charts.push(new Chart($("chart-months"), {
     type: "bar",
     data: {
       labels: d.monthly.map((m) => m.month),
       datasets: [
-        { label: "In", data: d.monthly.map((m) => m.income), backgroundColor: "#10b981", borderRadius: 8 },
-        { label: "Out", data: d.monthly.map((m) => m.expense), backgroundColor: "#ef4444", borderRadius: 8 },
+        { label: "In", data: d.monthly.map((m) => m.income), backgroundColor: barGradient("#10b981", "rgba(16,185,129,.35)"), borderRadius: topRadius },
+        { label: "Out", data: d.monthly.map((m) => m.expense), backgroundColor: barGradient("#ef4444", "rgba(239,68,68,.35)"), borderRadius: topRadius },
       ],
     },
     options: {
