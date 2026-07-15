@@ -3,7 +3,9 @@
    instantly and works offline; NEVER cache /api responses — financial
    results must stay in memory only. */
 
-const CACHE = "spendstory-v4";
+// Bump this on every deploy that changes any SHELL file — stale-while-revalidate
+// otherwise leaves returning visitors on a mismatched mix of old/new assets.
+const CACHE = "spendstory-v5";
 const SHELL = [
   ".",
   "index.html",
