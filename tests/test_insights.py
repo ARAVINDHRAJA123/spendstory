@@ -64,6 +64,82 @@ def test_annual_cost_computed():
     assert found[0]["annual_cost"] > 11000  # ~12 * 1000, allowing for exact day-count
 
 
+def test_ignores_person_who_also_sends_money_back():
+    # Real bug found on a live SBI statement: a P2P UPI transfer to a person
+    # (splitting bills, rent, repaying) can look exactly like a subscription
+    # by the numbers, but the same name also appears on the credit side —
+    # a real subscription service never sends money back.
+    rows = [
+        row(date(2026, 1, 5), merchant="Ganaga", debit=1000.0),
+        row(date(2026, 2, 4), merchant="Ganaga", debit=1000.0),
+        row(date(2026, 2, 15), merchant="Ganaga", credit=500.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_ignores_mostly_regular_merchant_with_one_outlier_payment():
+    # Real bug found on a live SBI statement: a merchant with several
+    # irregular payments can still have ONE coincidentally-matching
+    # consecutive pair. A true subscription must be consistent across
+    # its ENTIRE history, not just some subset of it.
+    rows = [
+        row(date(2026, 1, 1), merchant="Govinda", debit=11600.0),
+        row(date(2026, 1, 15), merchant="Govinda", debit=800.0),
+        row(date(2026, 1, 31), merchant="Govinda", debit=11600.0),  # coincidental match with Jan 1
+        row(date(2026, 2, 20), merchant="Govinda", debit=900.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_ignores_sip_mutual_fund_mandate():
+    rows = [
+        row(date(2026, 1, 5), narration="DEBIT CMP MANDATE DEBIT UTI MUTUAL FUND SIP", merchant="UTI", debit=2000.0),
+        row(date(2026, 2, 5), narration="DEBIT CMP MANDATE DEBIT UTI MUTUAL FUND SIP", merchant="UTI", debit=2000.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_ignores_mutual_fund_misspelled_as_seen_on_real_statement():
+    # A real SBI statement spells it "MTUAL FUND" (missing the U) — matched
+    # as observed in production data, not the "correct" spelling.
+    rows = [
+        row(date(2026, 1, 5), narration="DEBIT CMP MANDATE DEBIT UTI MTUAL FUND SMS", merchant="Uti", debit=2000.0),
+        row(date(2026, 2, 5), narration="DEBIT CMP MANDATE DEBIT UTI MTUAL FUND SMS", merchant="Uti", debit=2000.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_ignores_upi_p2a_person_transfer():
+    # P2A = UPI's own "Person-to-Account" transaction-type code, as opposed
+    # to P2M (Person-to-Merchant) — a real Axis statement had a recurring
+    # P2A transfer to an individual that otherwise looked exactly like a
+    # subscription by amount and interval alone.
+    rows = [
+        row(date(2026, 1, 29), narration="UPI/P2A/611998458856/SOMEONE A /UPI/State Bank Of India", merchant="Someone A", debit=4973.0),
+        row(date(2026, 2, 28), narration="UPI/P2A/651589653885/SOMEONE A /UPI/State Bank Of India", merchant="Someone A", debit=4992.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_ignores_loan_ach_debit():
+    rows = [
+        row(date(2026, 1, 7), narration="ACH-DR-HDFC BANK LIMITED-0000161743135", merchant="Hdfc Bank Limited", debit=12549.0),
+        row(date(2026, 2, 7), narration="ACH-DR-HDFC BANK LIMITED-0000161743135", merchant="Hdfc Bank Limited", debit=12549.0),
+    ]
+    assert find_recurring_subscriptions(rows) == []
+
+
+def test_still_detects_genuine_subscription_amid_noise():
+    # Sanity check: the stricter rules shouldn't kill real subscriptions.
+    rows = [
+        row(date(2026, 1, 15), narration="UPI/DR/Netflix/YESB/netflix-bil", merchant="Netflix", debit=649.0),
+        row(date(2026, 2, 14), narration="UPI/DR/Netflix/YESB/netflix-bil", merchant="Netflix", debit=649.0),
+        row(date(2026, 3, 16), narration="UPI/DR/Netflix/YESB/netflix-bil", merchant="Netflix", debit=649.0),
+    ]
+    found = find_recurring_subscriptions(rows)
+    assert len(found) == 1 and found[0]["merchant"] == "Netflix"
+
+
 # ── flag_tax_deductible ──────────────────────────────────────────────────────
 
 def test_flags_known_business_tool():

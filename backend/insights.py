@@ -8,6 +8,7 @@ they're testable and removable in one piece if the feature doesn't pan out.
 """
 
 import re
+import statistics
 from datetime import date
 
 
@@ -15,44 +16,77 @@ from datetime import date
 # A "subscription" here is a debit to the same merchant, for the same (or
 # near-identical) amount, recurring at a roughly monthly cadence — the
 # classic signature of an auto-renewing charge someone forgot about.
+#
+# Real-world statements are full of look-alikes that are NOT subscriptions:
+# person-to-person UPI transfers (rent, splitting bills, loan repayment to
+# an individual) and loan/SIP auto-debits. Both can be same-amount and
+# monthly, so numeric pattern-matching alone false-positives on them —
+# verified against real HDFC/Axis/SBI statements during testing, e.g. a
+# recurring transfer to a person ("Govinda R") and a mutual fund SIP mandate
+# both looked identical to a Netflix charge by the numbers alone. Two extra
+# checks rule those out: (1) ALL occurrences for a merchant must be
+# consistent, not just any two of them — a merchant with 5 irregular
+# payments and 2 that coincidentally line up isn't a subscription; (2) a
+# merchant that ever sends money back (a credit, not just debits) is a
+# person, not a subscription service.
 
 SUBSCRIPTION_INTERVAL_DAYS = (25, 35)   # "roughly monthly"
 SUBSCRIPTION_AMOUNT_TOLERANCE = 0.05    # 5% — allows for tax/FX drift
 
+# Loan/investment auto-debits and person-to-person transfers: numerically
+# identical to a subscription (fixed amount, monthly, recurring) but not
+# something to "cancel." "MTUAL FUND" (not a typo here) is how at least one
+# real SBI statement spells "mutual fund" in its own narration text — matched
+# as observed, not corrected, since that's what real statements contain.
+# "P2A" is UPI's own transaction-type code for Person-to-Account transfers,
+# as opposed to P2M (Person-to-Merchant) — a reliable person-vs-business signal.
+_NON_SUBSCRIPTION_RE = re.compile(
+    r"MU?TUAL FUND|\bSIP\b|\bLOAN\b|\bEMI\b|ACH-DR|\bNACH\b|\bECS\b|\bP2A\b", re.I
+)
+
 
 def find_recurring_subscriptions(rows: list[dict]) -> list[dict]:
-    """Groups debits by merchant, flags merchants with 2+ occurrences whose
-    gaps and amounts are consistent with a monthly subscription. Returns one
-    entry per detected subscription, sorted by amount descending (biggest
-    "wait, what's this?" first)."""
-    by_merchant: dict[str, list[tuple[date, float]]] = {}
+    """Groups debits by merchant, flags merchants whose ENTIRE debit history
+    (not just some subset of it) is consistent with a monthly subscription:
+    every gap 25-35 days, every amount within 5% of the median, no reverse
+    (credit) transactions to the same name, and no loan/SIP narration
+    markers. Returns one entry per detected subscription, sorted by amount
+    descending (biggest "wait, what's this?" first)."""
+    debits_by_merchant: dict[str, list[tuple[date, float]]] = {}
+    has_credit: set[str] = set()
     for r in rows:
-        if r["debit"] and r["merchant"]:
-            by_merchant.setdefault(r["merchant"], []).append((r["date"], r["debit"]))
+        if not r["merchant"]:
+            continue
+        if r["credit"]:
+            has_credit.add(r["merchant"])
+        if r["debit"]:
+            debits_by_merchant.setdefault(r["merchant"], []).append((r["date"], r["debit"]))
 
     found = []
-    for merchant, occurrences in by_merchant.items():
+    for merchant, occurrences in debits_by_merchant.items():
+        if merchant in has_credit or len(occurrences) < 2:
+            continue
+
         occurrences.sort(key=lambda o: o[0])
-        if len(occurrences) < 2:
-            continue
+        amounts = [a for _, a in occurrences]
+        median_amount = statistics.median(amounts)
+        if any(abs(a - median_amount) / median_amount > SUBSCRIPTION_AMOUNT_TOLERANCE for a in amounts):
+            continue  # not every payment matches — not a clean subscription
 
-        # Walk consecutive pairs, keep only the ones that look monthly + same amount.
-        matches = []
-        for (d1, a1), (d2, a2) in zip(occurrences, occurrences[1:]):
-            gap = (d2 - d1).days
-            amount_delta = abs(a2 - a1) / max(a1, a2)
-            if SUBSCRIPTION_INTERVAL_DAYS[0] <= gap <= SUBSCRIPTION_INTERVAL_DAYS[1] and amount_delta <= SUBSCRIPTION_AMOUNT_TOLERANCE:
-                matches.append((d1, d2, gap, a2))
+        gaps = [(d2 - d1).days for (d1, _), (d2, _) in zip(occurrences, occurrences[1:])]
+        if any(not (SUBSCRIPTION_INTERVAL_DAYS[0] <= g <= SUBSCRIPTION_INTERVAL_DAYS[1]) for g in gaps):
+            continue  # not every gap is monthly-ish
 
-        if not matches:
-            continue
+        narrations = " ".join(r["narration"] for r in rows if r["merchant"] == merchant)
+        if _NON_SUBSCRIPTION_RE.search(narrations):
+            continue  # loan/SIP mandate, not a subscription
 
-        avg_gap = round(sum(m[2] for m in matches) / len(matches))
+        avg_gap = round(sum(gaps) / len(gaps))
         last_date, last_amount = occurrences[-1]
         found.append({
             "merchant": merchant,
             "amount": last_amount,
-            "occurrences": len(matches) + 1,
+            "occurrences": len(occurrences),
             "avg_interval_days": avg_gap,
             "last_charged": last_date,
             "next_expected": last_date.toordinal() + avg_gap,  # caller converts back to date
