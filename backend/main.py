@@ -34,6 +34,7 @@ from analyser import (  # noqa: E402
     spending_stats,
     top_merchants,
 )
+from insights import find_recurring_subscriptions  # noqa: E402
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
 MAX_PDF_PAGES = 80          # statements rarely exceed this; caps CPU per request
@@ -169,6 +170,18 @@ def _parse_one(blob: bytes, password: str, label: str = "") -> dict:
             pass
 
 
+def _subscription_json(s: dict) -> dict:
+    return {
+        "merchant": s["merchant"],
+        "amount": s["amount"],
+        "occurrences": s["occurrences"],
+        "avg_interval_days": s["avg_interval_days"],
+        "last_charged": s["last_charged"].strftime("%Y-%m-%d"),
+        "next_expected": s["next_expected"].strftime("%Y-%m-%d"),
+        "annual_cost": s["annual_cost"],
+    }
+
+
 def _bundle(rows: list[dict], banks: list[str]) -> dict:
     return {
         "bank": " + ".join(dict.fromkeys(banks)) if len(set(banks)) > 1 else (banks[0] if banks else "UNKNOWN"),
@@ -178,6 +191,7 @@ def _bundle(rows: list[dict], banks: list[str]) -> dict:
         "categories": category_summary(rows),
         "merchants": top_merchants(rows),
         "anomalies": [_txn(r) for r in rows if r.get("is_anomaly")],
+        "subscriptions": [_subscription_json(s) for s in find_recurring_subscriptions(rows)],
         "transactions": [_txn(r) for r in sorted(rows, key=lambda r: r["date"])],
     }
 

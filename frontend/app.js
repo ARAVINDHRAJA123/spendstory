@@ -207,6 +207,13 @@ function render(d) {
     <li><div class="m-left"><div class="m-name">${esc(a.merchant)}</div><small class="muted">${fmtDate(a.date)}</small></div>
     <span class="amount neg">−${INR.format(a.debit)}</span></li>`).join("");
 
+  // Recurring subscriptions
+  $("subscription-card").hidden = d.subscriptions.length === 0;
+  $("subscription-list").innerHTML = d.subscriptions.slice(0, 6).map((s) => `
+    <li><div class="m-left"><div class="m-name">${esc(s.merchant)}</div>
+    <small class="muted">every ~${s.avg_interval_days}d · next ~${fmtDate(s.next_expected)} · ${INR.format(s.annual_cost)}/yr</small></div>
+    <span class="amount neg">−${INR.format(s.amount)}</span></li>`).join("");
+
   // Merchants with proportional bars
   const maxSpend = d.merchants[0]?.total_spend || 1;
   $("merchant-list").innerHTML = d.merchants.map((m) => `

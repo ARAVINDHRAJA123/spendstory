@@ -221,13 +221,14 @@ body {
 .chart-wrap canvas { max-width: 100% !important; }
 
 #anomaly-card { background: var(--warn-bg); }
-.anomaly-list, .merchant-list { list-style: none; }
-.anomaly-list li, .merchant-list li {
+#subscription-card { background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
+.anomaly-list, .merchant-list, .subscription-list { list-style: none; }
+.anomaly-list li, .merchant-list li, .subscription-list li {
   display: flex; justify-content: space-between; gap: 12px;
   padding: 11px 4px; border-bottom: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
 }
-.anomaly-list li:last-child, .merchant-list li:last-child { border-bottom: 0; }
+.anomaly-list li:last-child, .merchant-list li:last-child, .subscription-list li:last-child { border-bottom: 0; }
 .merchant-bar { height: 6px; border-radius: 6px; background: var(--brand); margin-top: 6px; transition: width .8s cubic-bezier(.2,.8,.2,1); }
 .m-left { flex: 1; min-width: 0; }
 .m-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -2,8 +2,10 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+from datetime import date
+
 from fastapi.testclient import TestClient
-from main import app
+from main import _bundle, app
 
 client = TestClient(app)
 
@@ -80,3 +82,16 @@ def test_analyse_multi_labels_failing_file():
     r = client.post("/api/analyse-multi", files=files, data={"password": ""})
     assert r.status_code == 415
     assert "bad.txt" in r.json()["detail"]
+
+
+def test_bundle_includes_subscriptions_field():
+    rows = [
+        {"date": date(2026, 1, 15), "narration": "Netflix", "debit": 649.0, "credit": 0.0,
+         "balance": 0.0, "merchant": "Netflix", "category": "Entertainment", "is_anomaly": False},
+        {"date": date(2026, 2, 14), "narration": "Netflix", "debit": 649.0, "credit": 0.0,
+         "balance": 0.0, "merchant": "Netflix", "category": "Entertainment", "is_anomaly": False},
+    ]
+    bundle = _bundle(rows, ["HDFC"])
+    assert "subscriptions" in bundle
+    assert bundle["subscriptions"][0]["merchant"] == "Netflix"
+    assert bundle["subscriptions"][0]["next_expected"] == "2026-03-16"
