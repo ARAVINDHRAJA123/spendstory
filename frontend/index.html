@@ -116,7 +116,16 @@
   </section>
 
   <section class="grid2">
-    <div class="card"><h2>Where it went</h2><div class="chart-wrap"><canvas id="chart-cats"></canvas></div></div>
+    <div class="card" id="cats-card">
+      <h2>Where it went</h2>
+      <div class="donut-row">
+        <div class="chart-wrap donut-wrap"><canvas id="chart-cats"></canvas></div>
+        <div class="cat-legend-wrap">
+          <p class="cat-legend-hint">Tap a category to show or hide it</p>
+          <div id="cat-legend" class="cat-legend"></div>
+        </div>
+      </div>
+    </div>
     <div class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></div>
   </section>
 

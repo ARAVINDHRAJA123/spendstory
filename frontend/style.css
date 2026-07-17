@@ -220,6 +220,46 @@ body {
 .chart-wrap { position: relative; height: min(320px, 46vh); }
 .chart-wrap canvas { max-width: 100% !important; }
 
+/* Extra bottom room so the doughnut's hover tooltip near the bottom of the
+   ring never gets clipped by the card edge. */
+#cats-card { padding-bottom: clamp(36px, 6vw, 56px); }
+.donut-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.donut-wrap { flex: 1 1 260px; min-width: 220px; }
+
+.cat-legend-wrap {
+  flex: 1 1 200px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; align-self: stretch;
+}
+.cat-legend-hint {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-align: center; margin: 0;
+}
+.cat-legend {
+  display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 240px;
+  padding: 10px; border-radius: 16px;
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 4px 20px rgba(0,0,0,.06);
+}
+.cat-legend-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 10px; cursor: pointer;
+  background: transparent; border: 0; width: 100%; text-align: left; font: inherit;
+  color: var(--ink); transition: background .15s ease, opacity .15s ease, transform .1s ease;
+}
+.cat-legend-item:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); transform: translateX(2px); }
+.cat-legend-item:active { transform: scale(.98); }
+.cat-legend-swatch {
+  width: 14px; height: 14px; border-radius: 5px; flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.cat-legend-label { flex: 1; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-legend-item.is-off { opacity: .4; }
+.cat-legend-item.is-off .cat-legend-label { text-decoration: line-through; }
+
 #anomaly-card { background: var(--warn-bg); }
 #subscription-card { background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
 .anomaly-list, .merchant-list, .subscription-list { list-style: none; }

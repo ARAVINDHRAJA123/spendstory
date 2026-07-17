@@ -236,6 +236,27 @@ function render(d) {
    theme switch alone won't re-tint existing charts — they must be rebuilt.
    Split out so the theme toggle can call this alone, without re-running
    count-up animations or duplicating history entries. */
+/* Real HTML legend for the doughnut, built from the same `cats` array used
+   for the chart data — so colours/labels/order always match exactly.
+   Clicking an item toggles that slice via Chart.js's own visibility API,
+   same behaviour as the built-in legend, just with a discoverable look. */
+function buildCatLegend(chart, cats) {
+  const el = $("cat-legend");
+  el.innerHTML = cats.map((c, i) => `
+    <button type="button" class="cat-legend-item" data-i="${i}">
+      <span class="cat-legend-swatch" style="background:${PALETTE[i % PALETTE.length]}"></span>
+      <span class="cat-legend-label">${esc(c.category)}</span>
+    </button>`).join("");
+  el.querySelectorAll(".cat-legend-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const i = Number(btn.dataset.i);
+      chart.toggleDataVisibility(i);
+      chart.update();
+      btn.classList.toggle("is-off", !chart.getDataVisibility(i));
+    });
+  });
+}
+
 function buildCharts(d) {
   charts.forEach((c) => c.destroy());
   charts = [];
@@ -252,7 +273,7 @@ function buildCharts(d) {
     visible.push({ category: "Other", spend: otherSpend });
     cats = visible;
   }
-  charts.push(new Chart($("chart-cats"), {
+  const catChart = new Chart($("chart-cats"), {
     type: "doughnut",
     data: {
       labels: cats.map((c) => c.category),
@@ -262,14 +283,20 @@ function buildCharts(d) {
       cutout: "62%", maintainAspectRatio: false,
       animation: { animateRotate: true, duration: 900, easing: "easeOutCubic" },
       plugins: {
-        legend: { position: "right", labels: { boxWidth: 14, boxHeight: 14, padding: 10 } },
+        // Built-in legend replaced by a real HTML panel below (see
+        // buildCatLegend) — a canvas-drawn legend can't be given hover
+        // states, a "tap to filter" hint, or a glass background, and
+        // nothing signalled that the colour squares were clickable toggles.
+        legend: { display: false },
         // caretSize: 0 — Chart.js's default tooltip arrow is positioned for
         // bar/line charts; on a doughnut it points from the arc's centroid
         // and renders as a disconnected floating triangle near the edge.
         tooltip: { caretSize: 0, cornerRadius: 8, padding: 10, callbacks: { label: (c) => " " + INR.format(c.parsed) } },
       },
     },
-  }));
+  });
+  charts.push(catChart);
+  buildCatLegend(catChart, cats);
 
   const barGradient = (topColor, bottomColor) => (ctx) => {
     const { chartArea } = ctx.chart;
@@ -280,6 +307,26 @@ function buildCharts(d) {
     return g;
   };
   const topRadius = { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 };
+  const BAR_GLOW_COLORS = ["#10b981", "#ef4444"]; // matches the "In"/"Out" datasets below
+
+  // Redraws whichever bar is currently hovered with a canvas shadow behind
+  // it, so it glows in its own colour instead of just Chart.js's default
+  // flat hover-darken.
+  const barGlowPlugin = {
+    id: "barGlow",
+    afterDatasetsDraw(chart) {
+      const active = chart.getActiveElements();
+      if (!active.length) return;
+      const { ctx } = chart;
+      active.forEach(({ element, datasetIndex }) => {
+        ctx.save();
+        ctx.shadowColor = BAR_GLOW_COLORS[datasetIndex] || "#8b5cf6";
+        ctx.shadowBlur = 18;
+        element.draw(ctx);
+        ctx.restore();
+      });
+    },
+  };
 
   charts.push(new Chart($("chart-months"), {
     type: "bar",
@@ -290,6 +337,7 @@ function buildCharts(d) {
         { label: "Out", data: d.monthly.map((m) => m.expense), backgroundColor: barGradient("#ef4444", "rgba(239,68,68,.35)"), borderRadius: topRadius },
       ],
     },
+    plugins: [barGlowPlugin],
     options: {
       maintainAspectRatio: false,
       animation: { duration: 900, easing: "easeOutCubic" },
