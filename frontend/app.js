@@ -57,6 +57,8 @@ $("btn-again").addEventListener("click", () => {
   pendingFiles = [];
   isSampleMode = false;
   $("sample-banner").hidden = true;
+  $("btn-export").disabled = false;
+  $("btn-export").title = "";
   $("password-row").hidden = true;
   $("trust-strip").hidden = false;
   $("pdf-password").value = "";
@@ -257,6 +259,12 @@ $("btn-try-sample").addEventListener("click", () => {
   show("results");
   render(buildSampleBundle());
   $("sample-banner").hidden = false;
+  // Disabled, not clickable-then-erroring — the persistent banner above
+  // already says this is sample data; a second message on click was
+  // redundant clutter, not a second explanation anyone needed.
+  const exportBtn = $("btn-export");
+  exportBtn.disabled = true;
+  exportBtn.title = "Sample data can't be exported — upload your own statement to download a real report.";
 });
 
 /* ── Rendering ─────────────────────────────────────────────── */
