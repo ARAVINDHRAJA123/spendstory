@@ -73,8 +73,11 @@
     <p class="dz-hint">or drag &amp; drop the PDF here</p>
     <p class="dz-banks">Works with HDFC · SBI · Axis · PNB · IOB · CUB</p>
     <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
-    <p class="dz-hint" style="margin-top:8px">Tip: select 2+ statements (e.g. two banks) to see them merged into one dashboard.</p>
+    <p class="dz-hint dz-password-hint">🔒 Password-protected? No worries — you can unlock it on the next step.</p>
+    <p class="dz-hint" style="margin-top:8px">💡 You can select and drop multiple bank statements at once to see a combined dashboard.</p>
   </div>
+
+  <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
 
   <div id="password-row" class="password-row" hidden>
     <label for="pdf-password">This PDF is locked. Enter its password:</label>
@@ -89,7 +92,7 @@
   <section class="trust" id="trust-strip">
     <div class="trust-item"><span>🔒</span><div><b>Private</b><small>Analysed in memory, deleted instantly</small></div></div>
     <div class="trust-item"><span>⚡</span><div><b>Fast</b><small>Results in a few seconds</small></div></div>
-    <div class="trust-item"><span>🏦</span><div><b>6 banks</b><small>Auto-detected from your PDF</small></div></div>
+    <div class="trust-item"><span>🏦</span><div><b>Multi-bank merging</b><small>Auto-detects and combines HDFC, SBI, Axis &amp; more</small></div></div>
   </section>
 </main>
 
@@ -107,6 +110,7 @@
     <button id="btn-export" class="btn-export" type="button">⬇ Download Excel report</button>
   </div>
   <p id="export-error" class="error" role="alert" hidden></p>
+  <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
 
   <section class="cards">
     <div class="card stat"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></div>

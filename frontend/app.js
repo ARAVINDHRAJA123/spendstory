@@ -10,6 +10,7 @@ const screens = { upload: $("screen-upload"), loading: $("screen-loading"), resu
 let pendingFiles = [];   // kept only in browser memory for the password retry
 let charts = [];
 let lastRenderedData = null; // re-drawn on theme change so chart text colour stays readable
+let isSampleMode = false; // viewing canned demo data — export/history are disabled
 
 const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
@@ -35,8 +36,14 @@ dz.addEventListener("click", () => fileInput.click());
 dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
 fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFiles([...fileInput.files]); });
 
-["dragover", "dragenter"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add("dragover"); }));
-["dragleave", "drop"].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.remove("dragover"); }));
+const dzTitle = $("dropzone").querySelector(".dz-title");
+const DZ_TITLE_DEFAULT = dzTitle.textContent;
+["dragover", "dragenter"].forEach((t) => dz.addEventListener(t, (e) => {
+  e.preventDefault(); dz.classList.add("dragover"); dzTitle.textContent = "Drop it right here!";
+}));
+["dragleave", "drop"].forEach((t) => dz.addEventListener(t, (e) => {
+  e.preventDefault(); dz.classList.remove("dragover"); dzTitle.textContent = DZ_TITLE_DEFAULT;
+}));
 dz.addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files]; if (fs.length) handleFiles(fs); });
 
 $("pw-submit").addEventListener("click", () => {
@@ -48,6 +55,8 @@ $("pdf-password").addEventListener("keydown", (e) => { if (e.key === "Enter") $(
 $("btn-again").addEventListener("click", () => {
   fileInput.value = "";
   pendingFiles = [];
+  isSampleMode = false;
+  $("sample-banner").hidden = true;
   $("password-row").hidden = true;
   $("trust-strip").hidden = false;
   $("pdf-password").value = "";
@@ -139,6 +148,12 @@ async function analyseMulti(files, password) {
 
 /* ── Excel export ──────────────────────────────────────────── */
 $("btn-export").addEventListener("click", async () => {
+  if (isSampleMode) {
+    const el = $("export-error");
+    el.hidden = false;
+    el.textContent = "This is sample data — upload your own statement to download a real report.";
+    return;
+  }
   if (!pendingFiles.length) return;
   const btn = $("btn-export");
   const original = btn.textContent;
@@ -172,6 +187,76 @@ $("btn-export").addEventListener("click", async () => {
     btn.disabled = false;
     btn.textContent = original;
   }
+});
+
+/* ── Sample data demo ─────────────────────────────────────────
+   Lets a visitor see the dashboard/charts/anomaly detection before
+   trusting the app with a real statement. Never hits the API, never
+   saved to "past analyses" — it's obviously fake data, not a real
+   analysis. Shape must match backend/main.py's _bundle() exactly. */
+const SAMPLE_TXNS = [
+  { date: "2026-01-03", narration: "SAL/ACME CORP/JAN", merchant: "Acme Corp", category: "Salary / Income", debit: 0, credit: 68000, is_anomaly: false },
+  { date: "2026-01-04", narration: "UPI-SWIGGY-swiggy@ybl", merchant: "Swiggy", category: "Food & Dining", debit: 480, credit: 0, is_anomaly: false },
+  { date: "2026-01-06", narration: "UPI-BIGBAZAAR-bb@okhdfc", merchant: "Big Bazaar", category: "Shopping", debit: 3200, credit: 0, is_anomaly: false },
+  { date: "2026-01-08", narration: "UPI-UBER-uber@paytm", merchant: "Uber", category: "Transport", debit: 340, credit: 0, is_anomaly: false },
+  { date: "2026-01-10", narration: "UPI-NETFLIX-netflix-bil", merchant: "Netflix", category: "Entertainment", debit: 649, credit: 0, is_anomaly: false },
+  { date: "2026-01-12", narration: "UPI-ELECTRICITYBOARD-bil", merchant: "Electricity Board", category: "Bills & Utilities", debit: 2100, credit: 0, is_anomaly: false },
+  { date: "2026-01-15", narration: "UPI-APOLLOPHARMACY-med", merchant: "Apollo Pharmacy", category: "Health", debit: 860, credit: 0, is_anomaly: false },
+  { date: "2026-01-18", narration: "UPI-SWIGGY-swiggy@ybl", merchant: "Swiggy", category: "Food & Dining", debit: 610, credit: 0, is_anomaly: false },
+  { date: "2026-01-22", narration: "UPI-AMAZON-amazon@apl", merchant: "Amazon", category: "Shopping", debit: 4500, credit: 0, is_anomaly: false },
+  { date: "2026-01-28", narration: "UPI-GYMFIT-gymfit@okic", merchant: "Gym Fit", category: "Health", debit: 1200, credit: 0, is_anomaly: false },
+  { date: "2026-02-03", narration: "SAL/ACME CORP/FEB", merchant: "Acme Corp", category: "Salary / Income", debit: 0, credit: 68000, is_anomaly: false },
+  { date: "2026-02-05", narration: "UPI-SWIGGY-swiggy@ybl", merchant: "Swiggy", category: "Food & Dining", debit: 720, credit: 0, is_anomaly: false },
+  { date: "2026-02-09", narration: "UPI-CROMA-electronics", merchant: "Croma Electronics", category: "Shopping", debit: 45000, credit: 0, is_anomaly: true },
+  { date: "2026-02-10", narration: "UPI-NETFLIX-netflix-bil", merchant: "Netflix", category: "Entertainment", debit: 649, credit: 0, is_anomaly: false },
+  { date: "2026-02-13", narration: "UPI-UBER-uber@paytm", merchant: "Uber", category: "Transport", debit: 410, credit: 0, is_anomaly: false },
+  { date: "2026-02-14", narration: "UPI-ELECTRICITYBOARD-bil", merchant: "Electricity Board", category: "Bills & Utilities", debit: 2250, credit: 0, is_anomaly: false },
+  { date: "2026-02-19", narration: "UPI-BIGBAZAAR-bb@okhdfc", merchant: "Big Bazaar", category: "Shopping", debit: 2800, credit: 0, is_anomaly: false },
+  { date: "2026-02-24", narration: "UPI-GYMFIT-gymfit@okic", merchant: "Gym Fit", category: "Health", debit: 1200, credit: 0, is_anomaly: false },
+  { date: "2026-03-03", narration: "SAL/ACME CORP/MAR", merchant: "Acme Corp", category: "Salary / Income", debit: 0, credit: 71000, is_anomaly: false },
+  { date: "2026-03-06", narration: "UPI-SWIGGY-swiggy@ybl", merchant: "Swiggy", category: "Food & Dining", debit: 550, credit: 0, is_anomaly: false },
+  { date: "2026-03-10", narration: "UPI-NETFLIX-netflix-bil", merchant: "Netflix", category: "Entertainment", debit: 649, credit: 0, is_anomaly: false },
+  { date: "2026-03-12", narration: "UPI-UBER-uber@paytm", merchant: "Uber", category: "Transport", debit: 380, credit: 0, is_anomaly: false },
+  { date: "2026-03-15", narration: "UPI-ELECTRICITYBOARD-bil", merchant: "Electricity Board", category: "Bills & Utilities", debit: 1980, credit: 0, is_anomaly: false },
+  { date: "2026-03-20", narration: "UPI-AMAZON-amazon@apl", merchant: "Amazon", category: "Shopping", debit: 3100, credit: 0, is_anomaly: false },
+];
+
+function buildSampleBundle() {
+  const income = SAMPLE_TXNS.reduce((s, t) => s + t.credit, 0);
+  const spend = SAMPLE_TXNS.reduce((s, t) => s + t.debit, 0);
+  const byMonth = {};
+  const byCat = {};
+  const byMerchant = {};
+  for (const t of SAMPLE_TXNS) {
+    const month = new Date(t.date + "T00:00:00").toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+    byMonth[month] ??= { month, income: 0, expense: 0 };
+    byMonth[month].income += t.credit;
+    byMonth[month].expense += t.debit;
+    if (t.debit) {
+      byCat[t.category] = (byCat[t.category] || 0) + t.debit;
+      byMerchant[t.merchant] = (byMerchant[t.merchant] || 0) + t.debit;
+    }
+  }
+  return {
+    bank: "Sample", banks: ["Sample"],
+    stats: { total_spend: spend, total_income: income, net_cash_flow: income - spend, txn_count: SAMPLE_TXNS.length },
+    monthly: Object.values(byMonth),
+    categories: Object.entries(byCat).map(([category, spend]) => ({ category, spend })),
+    merchants: Object.entries(byMerchant).map(([merchant, total_spend]) => ({ merchant, total_spend })).sort((a, b) => b.total_spend - a.total_spend),
+    anomalies: SAMPLE_TXNS.filter((t) => t.is_anomaly),
+    subscriptions: [{
+      merchant: "Netflix", amount: 649, occurrences: 3, avg_interval_days: 30,
+      last_charged: "2026-03-10", next_expected: "2026-04-09", annual_cost: 7897,
+    }],
+    transactions: SAMPLE_TXNS,
+  };
+}
+
+$("btn-try-sample").addEventListener("click", () => {
+  isSampleMode = true;
+  show("results");
+  render(buildSampleBundle());
+  $("sample-banner").hidden = false;
 });
 
 /* ── Rendering ─────────────────────────────────────────────── */
