@@ -1042,6 +1042,7 @@ def write_transactions(wb, rows):
     ws.auto_filter.ref = "A1:K1"
     autofit_col(ws, 2)  # Merchant
     autofit_col(ws, 3)  # Narration
+    autofit_col(ws, 9)  # Category — custom category names can run long
 
 def write_monthly(wb, monthly):
     ws = wb.create_sheet("Monthly Summary")
@@ -1197,6 +1198,12 @@ def write_anomalies(wb, anomalies, all_rows):
         target = row_in_txn_sheet.get(id(r))
         if target:
             jump.hyperlink = f"#'Transactions'!A{target}"
+
+    # Safe to autofit here (unlike column A): the merged explanation rows
+    # above only populate column A, so B/C only ever see real merchant/
+    # narration text, never the long explanatory sentences.
+    autofit_col(ws, 2, max_width=32)  # Who was paid
+    autofit_col(ws, 3, max_width=50)  # Full narration
 
     # ── Per-row plain-English reason ─────────────────────────────────────────
     reason_row = len(anomalies) + 9
