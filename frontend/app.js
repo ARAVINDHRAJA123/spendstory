@@ -281,6 +281,11 @@ function buildCharts(d) {
     },
     options: {
       cutout: "62%", maintainAspectRatio: false,
+      // Tooltips are drawn inside the canvas's own coordinate space, so
+      // outer CSS padding on the card can't stop one near the bottom of the
+      // ring from being clipped by the canvas edge — it needs real internal
+      // room, reserved here.
+      layout: { padding: { top: 12, bottom: 40, left: 8, right: 8 } },
       animation: { animateRotate: true, duration: 900, easing: "easeOutCubic" },
       plugins: {
         // Built-in legend replaced by a real HTML panel below (see
