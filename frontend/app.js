@@ -280,12 +280,14 @@ function buildCharts(d) {
       datasets: [{ data: cats.map((c) => c.spend), backgroundColor: PALETTE, borderWidth: 0, hoverOffset: 10 }],
     },
     options: {
-      cutout: "62%", maintainAspectRatio: false,
-      // Tooltips are drawn inside the canvas's own coordinate space, so
-      // outer CSS padding on the card can't stop one near the bottom of the
-      // ring from being clipped by the canvas edge — it needs real internal
-      // room, reserved here.
-      layout: { padding: { top: 12, bottom: 40, left: 8, right: 8 } },
+      // cutout/radius: Chart.js auto-sizes the doughnut's base radius to
+      // fill the canvas, but does NOT reserve room for hoverOffset pushing
+      // the hovered slice further out — so hovering ANY slice (top, bottom,
+      // either side) pushed it past the canvas edge and got clipped.
+      // radius: '88%' shrinks the base ring so that 10px hover expansion
+      // always lands inside the canvas, on every edge, regardless of size.
+      cutout: "62%", radius: "88%", maintainAspectRatio: false,
+      layout: { padding: 12 },
       animation: { animateRotate: true, duration: 900, easing: "easeOutCubic" },
       plugins: {
         // Built-in legend replaced by a real HTML panel below (see
