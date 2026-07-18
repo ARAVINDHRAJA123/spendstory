@@ -266,7 +266,11 @@ body {
    just as naturally collapses back to 1 full-width column if only one of
    the two children is visible (e.g. only one of anomaly/subscription has
    data), no JS needed to detect that case. */
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+/* margin-top lives on the section itself (spacing from whatever came
+   before it), not its children — a grid container doesn't let child
+   margins collapse outward, so zeroing the children without giving the
+   grid its own margin left it touching the previous section entirely. */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
 .grid2 > .card { margin-top: 0; }
 .chart-wrap { position: relative; height: min(320px, 46vh); }
 .chart-wrap canvas { max-width: 100% !important; }
