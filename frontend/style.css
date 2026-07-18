@@ -252,9 +252,22 @@ body {
 .stat small { color: var(--muted); font-weight: 600; font-size: 14px; }
 .stat b { display: block; font-size: clamp(22px, 3.2vw, 30px); font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .pos { color: var(--pos); } .neg { color: var(--neg); }
+.stat.filterable {
+  cursor: pointer; border: 1.5px solid transparent; text-align: left;
+  font: inherit; color: inherit; width: 100%;
+  transition: border-color .15s ease, transform .1s ease;
+}
+.stat.filterable:hover { border-color: color-mix(in srgb, var(--brand) 30%, transparent); }
+.stat.filterable:active { transform: scale(.98); }
+.stat.filterable.is-active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
 
-/* Single-column flow: everything scrolls top-to-bottom, nothing sideways. */
-.grid2 { display: grid; grid-template-columns: 1fr; gap: 0; }
+/* Mobile: single column, everything scrolls top-to-bottom. Wide viewports:
+   auto-fit naturally goes to 2 columns when there's room for both — and
+   just as naturally collapses back to 1 full-width column if only one of
+   the two children is visible (e.g. only one of anomaly/subscription has
+   data), no JS needed to detect that case. */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+.grid2 > .card { margin-top: 0; }
 .chart-wrap { position: relative; height: min(320px, 46vh); }
 .chart-wrap canvas { max-width: 100% !important; }
 
@@ -317,12 +330,22 @@ body {
   border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink);
 }
 #txn-search:focus { border-color: var(--brand); outline: none; }
+.txn-filter-note {
+  font-size: 13.5px; font-weight: 600; color: var(--brand); margin: -2px 0 10px;
+}
 .txn-scroll { max-height: 430px; overflow: auto; border-radius: 12px; }
-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+/* Proportional columns — Date/Amount are short fixed content, Merchant
+   gets the lion's share since it's the column people actually scan. */
+col.col-date { width: 14%; } col.col-merchant { width: 46%; }
+col.col-category { width: 24%; } col.col-amount { width: 16%; }
 th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; position: sticky; top: 0; background: var(--card); }
-td { padding: 10px; border-top: 1px solid var(--line); }
+td { padding: 10px; border-top: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+tbody tr { cursor: default; transition: background .12s ease; }
+tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 tr.flag td { background: color-mix(in srgb, var(--neg) 7%, transparent); }
+tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); }
 .cat-chip { font-size: 12.5px; font-weight: 600; background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 
 .muted { color: var(--muted); font-size: 15px; margin-bottom: 8px; }

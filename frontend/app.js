@@ -316,14 +316,48 @@ function render(d) {
   requestAnimationFrame(() => requestAnimationFrame(() =>
     document.querySelectorAll(".merchant-bar").forEach((b) => { b.style.width = b.dataset.w + "%"; })));
 
-  renderTable(d.transactions);
+  activeStatFilter = null;
+  $("stat-spend-card").classList.remove("is-active");
+  $("stat-income-card").classList.remove("is-active");
   $("txn-search").value = "";
-  $("txn-search").oninput = (e) => {
-    const q = e.target.value.toLowerCase();
-    renderTable(d.transactions.filter((t) =>
-      (t.merchant + " " + t.category + " " + t.narration).toLowerCase().includes(q)));
-  };
+  applyTxnFilters();
 }
+
+/* KPI cards double as transaction-table filters — click "Money out" to see
+   only debits, "Money in" for only credits, click again to clear. Combines
+   with the free-text search rather than replacing it. */
+let activeStatFilter = null; // null | "debit" | "credit"
+
+function applyTxnFilters() {
+  const d = lastRenderedData;
+  if (!d) return;
+  const q = $("txn-search").value.toLowerCase();
+  const filtered = d.transactions.filter((t) => {
+    if (activeStatFilter === "debit" && !(t.debit > 0)) return false;
+    if (activeStatFilter === "credit" && !(t.credit > 0)) return false;
+    return (t.merchant + " " + t.category + " " + t.narration).toLowerCase().includes(q);
+  });
+  renderTable(filtered);
+  const note = $("txn-filter-note");
+  if (activeStatFilter) {
+    note.hidden = false;
+    note.textContent = `Showing only ${activeStatFilter === "debit" ? "money out" : "money in"} (${filtered.length} of ${d.transactions.length}) — tap the card again to clear.`;
+  } else {
+    note.hidden = true;
+  }
+}
+
+$("txn-search").addEventListener("input", applyTxnFilters);
+
+function toggleStatFilter(type) {
+  activeStatFilter = activeStatFilter === type ? null : type;
+  $("stat-spend-card").classList.toggle("is-active", activeStatFilter === "debit");
+  $("stat-income-card").classList.toggle("is-active", activeStatFilter === "credit");
+  applyTxnFilters();
+  if (activeStatFilter) $("txn-table").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+$("stat-spend-card").addEventListener("click", () => toggleStatFilter("debit"));
+$("stat-income-card").addEventListener("click", () => toggleStatFilter("credit"));
 
 /* Chart colours are baked into the canvas at draw time, so a CSS-variable
    theme switch alone won't re-tint existing charts — they must be rebuilt.
@@ -450,7 +484,7 @@ function buildCharts(d) {
 function renderTable(rows) {
   $("txn-table").querySelector("tbody").innerHTML = rows.map((t) => `
     <tr class="${t.is_anomaly ? "flag" : ""}">
-      <td>${fmtDate(t.date)}</td>
+      <td>${fmtDateShort(t.date)}</td>
       <td title="${esc(t.narration)}">${esc(t.merchant)}</td>
       <td><span class="cat-chip">${esc(t.category)}</span></td>
       <td class="num ${t.credit > 0 ? "pos" : "neg"}">${t.credit > 0 ? "+" + INR.format(t.credit) : "−" + INR.format(t.debit)}</td>
@@ -459,6 +493,9 @@ function renderTable(rows) {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" });
+// Transaction-table-only: the whole table is one statement period, so
+// repeating the year on every single row is clutter, not information.
+const fmtDateShort = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 
 /* ── Past analyses (localStorage — this device only) ───────── */
 const HIST_KEY = "ss-history";

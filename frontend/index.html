@@ -113,8 +113,8 @@
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
 
   <section class="cards">
-    <div class="card stat"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></div>
-    <div class="card stat"><small>Money in</small><b id="stat-income" class="pos">₹0</b></div>
+    <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></button>
+    <button class="card stat filterable" id="stat-income-card" type="button" data-filter="credit"><small>Money in</small><b id="stat-income" class="pos">₹0</b></button>
     <div class="card stat"><small>Net</small><b id="stat-net">₹0</b></div>
     <div class="card stat"><small>Transactions</small><b id="stat-count">0</b></div>
   </section>
@@ -130,30 +130,34 @@
         </div>
       </div>
     </div>
-    <div class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></div>
+    <div class="card">
+      <h2>Top places you paid</h2>
+      <ul id="merchant-list" class="merchant-list"></ul>
+    </div>
   </section>
 
-  <section class="card" id="anomaly-card" hidden>
-    <h2>⚠️ Unusually large payments</h2>
-    <p class="muted">These are much bigger than your typical spend — worth a quick look.</p>
-    <ul id="anomaly-list" class="anomaly-list"></ul>
-  </section>
+  <section class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></section>
 
-  <section class="card" id="subscription-card" hidden>
-    <h2>🔁 Recurring subscriptions</h2>
-    <p class="muted">Same amount, roughly every month — the auto-renewing charges easiest to forget about.</p>
-    <ul id="subscription-list" class="subscription-list"></ul>
-  </section>
+  <section class="grid2">
+    <div class="card" id="anomaly-card" hidden>
+      <h2>⚠️ Unusually large payments</h2>
+      <p class="muted">These are much bigger than your typical spend — worth a quick look.</p>
+      <ul id="anomaly-list" class="anomaly-list"></ul>
+    </div>
 
-  <section class="card">
-    <h2>Top places you paid</h2>
-    <ul id="merchant-list" class="merchant-list"></ul>
+    <div class="card" id="subscription-card" hidden>
+      <h2>🔁 Recurring subscriptions</h2>
+      <p class="muted">Same amount, roughly every month — the auto-renewing charges easiest to forget about.</p>
+      <ul id="subscription-list" class="subscription-list"></ul>
+    </div>
   </section>
 
   <section class="card">
     <h2>All transactions</h2>
     <input type="search" id="txn-search" placeholder="Search — e.g. swiggy, rent…" aria-label="Search transactions">
+    <p id="txn-filter-note" class="txn-filter-note" hidden></p>
     <div class="txn-scroll"><table id="txn-table">
+      <colgroup><col class="col-date"><col class="col-merchant"><col class="col-category"><col class="col-amount"></colgroup>
       <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th class="num">Amount</th></tr></thead>
       <tbody></tbody>
     </table></div>
