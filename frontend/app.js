@@ -59,6 +59,7 @@ $("btn-again").addEventListener("click", () => {
   $("sample-banner").hidden = true;
   $("btn-export").disabled = false;
   $("btn-export").title = "";
+  $("mask-toggle").checked = false;
   $("password-row").hidden = true;
   $("trust-strip").hidden = false;
   $("pdf-password").value = "";
@@ -164,9 +165,11 @@ $("btn-export").addEventListener("click", async () => {
   $("export-error").hidden = true;
 
   try {
+    const masked = $("mask-toggle").checked;
     const form = new FormData();
     for (const f of pendingFiles) form.append("files", f);
     form.append("password", $("pdf-password").value || "");
+    form.append("masked", masked ? "true" : "false");
     const res = await fetch("api/export-excel", { method: "POST", body: form });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -176,7 +179,7 @@ $("btn-export").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "SpendStory_Report.xlsx";
+    a.download = masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx";
     document.body.appendChild(a);
     a.click();
     a.remove();

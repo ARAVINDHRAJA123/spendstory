@@ -27,6 +27,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import BarChart, PieChart, Reference
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -811,6 +812,25 @@ def monthly_summary(rows):
         m["net"] = m["income"] - m["expense"]
     return list(months.values())
 
+def _financial_year_label(d) -> str:
+    """Indian FY runs April–March: a January 2026 transaction is in FY 2025-26."""
+    start_year = d.year if d.month >= 4 else d.year - 1
+    return f"FY {start_year}-{str(start_year + 1)[-2:]}"
+
+def fy_summary(rows):
+    """Same shape as monthly_summary(), grouped by Indian financial year
+    (April–March) instead of calendar month — freelancers/small business
+    owners think in FY terms for tax filing, not calendar months."""
+    years = {}
+    for r in rows:
+        key = _financial_year_label(r["date"])
+        years.setdefault(key, {"fy": key, "income": 0.0, "expense": 0.0})
+        years[key]["income"]  += r["credit"]
+        years[key]["expense"] += r["debit"]
+    for y in years.values():
+        y["net"] = y["income"] - y["expense"]
+    return sorted(years.values(), key=lambda y: y["fy"])
+
 def category_summary(rows):
     cats = {}
     for r in rows:
@@ -851,6 +871,26 @@ def spending_stats(rows):
         "income_count":    len(credits),
     }
 
+# ── Anonymized export ────────────────────────────────────────────────────────
+# For sharing a statement with a CA/advisor/business partner without exposing
+# UPI handles or account-number fragments embedded in the raw narration text.
+# Merchant/person names and everything else (amounts, dates, categories) stay
+# intact — this masks IDENTIFIERS, not the financial picture.
+
+_LONG_DIGITS_RE = re.compile(r"\d{6,}")
+_UPI_HANDLE_RE  = re.compile(r"\b(\w{2})\w*(@\w+)")
+
+def _mask_text(text: str) -> str:
+    text = _LONG_DIGITS_RE.sub(lambda m: "*" * len(m.group()), text)
+    text = _UPI_HANDLE_RE.sub(lambda m: m.group(1) + "***" + m.group(2), text)
+    return text
+
+def _mask_ref(ref: str) -> str:
+    ref = (ref or "").strip()
+    if len(ref) <= 3:
+        return "*" * len(ref)
+    return "X" * (len(ref) - 3) + ref[-3:]
+
 # ── Excel export ──────────────────────────────────────────────────────────────
 
 C_NAVY  = "1A3C5E"
@@ -864,7 +904,10 @@ C_WARN_T= "922B21"
 
 THIN   = Side(style="thin", color="CCCCCC")
 BDR    = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-INR    = '₹#,##0.00'
+# Indian Lakh/Crore digit grouping (2,33,398 not 233,398) — verified against
+# LibreOffice: 999.5 -> Rs.999.50, 233398.46 -> Rs.2,33,398.46,
+# 123456789.12 -> Rs.12,34,56,789.12.
+INR    = r'[>=10000000]"₹"##\,##\,##\,##0.00;[>=100000]"₹"##\,##\,##0.00;"₹"##,##0.00'
 DTEFMT = 'DD/MM/YYYY'
 
 def hdr(ws, row, col, value, width=None, fill=C_NAVY):
@@ -897,11 +940,13 @@ def dc(ws, row, col, value, fmt=None, bold=False, color=None, bg=None):
         c.number_format = fmt
     return c
 
-def write_summary(wb, stats):
+def write_summary(wb, stats, fy):
     ws = wb.active
     ws.title = "Summary"
-    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["A"].width = 34  # fits "Tax-Deductible Total (Business)" below
     ws.column_dimensions["B"].width = 20
+    ws.column_dimensions["C"].width = 16
+    ws.column_dimensions["D"].width = 16
 
     t = ws.cell(row=1, column=1, value="Bank Statement — Analysis")
     t.font = Font(name="Arial", bold=True, size=14, color=C_BLUE)
@@ -926,6 +971,35 @@ def write_summary(wb, stats):
         if fmt:
             vc.number_format = fmt
 
+    # ── Tax estimate — live Excel formula, updates the moment the user fills
+    # in the "Tax Deductible?" dropdown on the Transactions sheet. No re-export
+    # needed; this is the actual point of the dropdown existing at all.
+    tax_row = 13
+    tax_label = ws.cell(row=tax_row, column=1, value="Tax-Deductible Total (Business)")
+    tax_label.font = Font(name="Arial", size=10, bold=True, color=C_BLUE)
+    tax_val = ws.cell(row=tax_row, column=2,
+        value='=SUMIF(Transactions!K:K,"Yes - Business",Transactions!F:F)')
+    tax_val.font = Font(name="Arial", size=10, bold=True, color=C_BLUE)
+    tax_val.number_format = INR
+    hint = ws.cell(row=tax_row + 1, column=1,
+        value="↳ Mark transactions on the Transactions sheet (column K) to populate this.")
+    hint.font = Font(name="Arial", size=8.5, italic=True, color="777777")
+    ws.merge_cells(f"A{tax_row + 1}:B{tax_row + 1}")
+
+    # ── Financial Year breakdown (April–March) — freelancers/small business
+    # owners think in FY terms for tax filing, not calendar months.
+    fy_row = tax_row + 3
+    fy_title = ws.cell(row=fy_row, column=1, value="By Financial Year (Apr–Mar)")
+    fy_title.font = Font(name="Arial", bold=True, size=11, color=C_BLUE)
+    ws.merge_cells(f"A{fy_row}:B{fy_row}")
+    for i, h in enumerate(["Financial Year", "Income (₹)", "Expense (₹)", "Net (₹)"], 1):
+        hdr(ws, fy_row + 1, i, h)
+    for i, y in enumerate(fy, fy_row + 2):
+        dc(ws, i, 1, y["fy"])
+        dc(ws, i, 2, y["income"], INR, color=C_GREEN)
+        dc(ws, i, 3, y["expense"], INR, color=C_RED)
+        dc(ws, i, 4, y["net"], INR, bold=True, color=C_GREEN if y["net"] >= 0 else C_RED)
+
 def write_transactions(wb, rows):
     ws = wb.create_sheet("Transactions")
     ws.freeze_panes = "A2"
@@ -933,10 +1007,12 @@ def write_transactions(wb, rows):
 
     cols = [("Date",12),("Merchant",24),("Narration",46),("Ref No",20),
             ("Value Date",12),("Debit (₹)",14),("Credit (₹)",14),
-            ("Balance (₹)",14),("Category",22),("Flag",8)]
+            ("Balance (₹)",14),("Category",22),("Flag",8),
+            ("Tax Deductible?",18)]
     for i, (h, w) in enumerate(cols, 1):
         hdr(ws, 1, i, h, w)
 
+    last_row = len(rows) + 1
     for idx, r in enumerate(rows, 2):
         is_anom = r.get("is_anomaly", False)
         bg = C_WARN if is_anom else None
@@ -951,13 +1027,25 @@ def write_transactions(wb, rows):
         dc(ws, idx, 9, r["category"],           bg=bg)
         dc(ws, idx,10, "⚠" if is_anom else "",
            bold=is_anom, color=C_WARN_T if is_anom else None, bg=bg)
+        dc(ws, idx,11, "",                      bg=bg)  # user fills this in via the dropdown
 
-    ws.auto_filter.ref = "A1:J1"
+    # Interactive dropdown for freelancers/small businesses separating
+    # business write-offs from personal spend — feeds the tax estimate box
+    # on the Summary sheet via SUMIF, entirely inside Excel, no re-upload needed.
+    if len(rows) > 0:
+        dv = DataValidation(type="list", formula1='"Yes - Business,No - Personal,Unsure"', allow_blank=True)
+        dv.error = "Choose one of: Yes - Business, No - Personal, Unsure"
+        dv.errorTitle = "Invalid entry"
+        ws.add_data_validation(dv)
+        dv.add(f"K2:K{last_row}")
+
+    ws.auto_filter.ref = "A1:K1"
     autofit_col(ws, 2)  # Merchant
     autofit_col(ws, 3)  # Narration
 
 def write_monthly(wb, monthly):
     ws = wb.create_sheet("Monthly Summary")
+    ws.freeze_panes = "A2"
     for i, (h, w) in enumerate([("Month",12),("Income (₹)",16),("Expense (₹)",16),("Net (₹)",16)], 1):
         hdr(ws, 1, i, h, w)
     for idx, m in enumerate(monthly, 2):
@@ -992,6 +1080,7 @@ def write_monthly(wb, monthly):
 
 def write_categories(wb, cats):
     ws = wb.create_sheet("Categories")
+    ws.freeze_panes = "A2"
     for i, (h, w) in enumerate([("Category",24),("Total (₹)",16),("Transactions",14)], 1):
         hdr(ws, 1, i, h, w)
     for idx, c in enumerate(cats, 2):
@@ -1010,6 +1099,7 @@ def write_categories(wb, cats):
 
 def write_merchants(wb, merchants):
     ws = wb.create_sheet("Top Merchants")
+    ws.freeze_panes = "A2"
     hdr(ws, 1, 1, "Merchant",           28)
     hdr(ws, 1, 2, "Total Spend (Rs.)",  18)
     for idx, m in enumerate(merchants, 2):
@@ -1040,11 +1130,13 @@ def write_merchants(wb, merchants):
 
 def write_anomalies(wb, anomalies, all_rows):
     ws = wb.create_sheet("Anomalies")
+    ws.freeze_panes = "A8"  # explanation block + header row stay pinned
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 28
     ws.column_dimensions["C"].width = 44
     ws.column_dimensions["D"].width = 16
     ws.column_dimensions["E"].width = 22
+    ws.column_dimensions["F"].width = 16
 
     # ── Plain-English explanation block ──────────────────────────────────────
     s = _debit_stats(all_rows)
@@ -1085,10 +1177,15 @@ def write_anomalies(wb, anomalies, all_rows):
     # ── Header row ───────────────────────────────────────────────────────────
     for i, (h, w) in enumerate([("Date",12),("Who was paid",28),
                                   ("Full narration",44),
-                                  ("Amount paid (Rs.)",18),("Category",22)], 1):
+                                  ("Amount paid (Rs.)",18),("Category",22),
+                                  ("Audit trail",16)], 1):
         hdr(ws, 7, i, h, fill=C_WARN_T)
 
     # ── Data rows ────────────────────────────────────────────────────────────
+    # Direct row lookup (not an Excel MATCH() formula) — we already know
+    # exactly which row each anomaly landed on in the Transactions sheet,
+    # since write_transactions() writes all_rows in this same order.
+    row_in_txn_sheet = {id(r): i for i, r in enumerate(all_rows, start=2)}
     for idx, r in enumerate(anomalies, 8):
         dc(ws, idx, 1, r["date"],       DTEFMT, bg=C_WARN)
         dc(ws, idx, 2, r["merchant"],           bg=C_WARN)
@@ -1096,6 +1193,10 @@ def write_anomalies(wb, anomalies, all_rows):
         dc(ws, idx, 4, r["debit"], "#,##0.00",
            bold=True, color=C_WARN_T, bg=C_WARN)
         dc(ws, idx, 5, r["category"],           bg=C_WARN)
+        jump = dc(ws, idx, 6, "→ View row", bold=True, color="1155CC", bg=C_WARN)
+        target = row_in_txn_sheet.get(id(r))
+        if target:
+            jump.hyperlink = f"#'Transactions'!A{target}"
 
     # ── Per-row plain-English reason ─────────────────────────────────────────
     reason_row = len(anomalies) + 9
@@ -1117,9 +1218,19 @@ def write_anomalies(wb, anomalies, all_rows):
         ws.merge_cells(f"A{i}:E{i}")
         ws.row_dimensions[i].height = 18
 
-def export_excel(rows, monthly, cats, merchants, anomalies, stats, path):
+def export_excel(rows, monthly, cats, merchants, anomalies, stats, path, masked=False):
+    if masked:
+        # Mutates the same dict objects `anomalies` already holds references
+        # to (detect_anomalies() returns actual refs into `rows`, not
+        # copies) — so anomaly detail rows come out masked too, for free,
+        # and the id()-based audit-trail links in write_anomalies still
+        # resolve correctly since identity is untouched.
+        for r in rows:
+            r["narration"] = _mask_text(r.get("narration", ""))
+            r["ref_no"] = _mask_ref(r.get("ref_no", ""))
+
     wb = Workbook()
-    write_summary(wb, stats)
+    write_summary(wb, stats, fy_summary(rows))
     write_transactions(wb, rows)
     write_monthly(wb, monthly)
     write_categories(wb, cats)

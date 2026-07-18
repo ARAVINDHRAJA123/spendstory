@@ -141,6 +141,14 @@ body {
   border-radius: 12px; padding: 10px 16px;
 }
 
+.mask-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--muted);
+  margin: 0 0 14px; width: fit-content;
+}
+.mask-toggle input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
+.mask-toggle:hover { color: var(--ink); }
+
 /* ── Password ── */
 .password-row { max-width: 560px; margin: 18px auto 0; background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); animation: rise .35s ease both; }
 .password-row label { font-weight: 600; }

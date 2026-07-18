@@ -231,11 +231,16 @@ async def analyse_multi(request: Request, files: list[UploadFile] = File(...), p
 
 
 @app.post("/api/export-excel")
-async def export_excel_report(request: Request, files: list[UploadFile] = File(...), password: str = Form(default="")):
+async def export_excel_report(request: Request, files: list[UploadFile] = File(...),
+                               password: str = Form(default=""), masked: bool = Form(default=False)):
     """Re-parses the uploaded statement(s) (stateless, same privacy model as
     /api/analyse) and streams back a multi-sheet Excel report — summary,
     transactions, monthly/category/merchant breakdowns, anomalies. Nothing
-    is written to disk; the workbook is built entirely in memory."""
+    is written to disk; the workbook is built entirely in memory.
+
+    masked=True scrubs UPI handles/account-number fragments out of the
+    Narration and Ref No columns (amounts, dates, categories untouched) —
+    for sharing the file with a CA/advisor without exposing raw account IDs."""
     if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
     if not files:
@@ -256,12 +261,13 @@ async def export_excel_report(request: Request, files: list[UploadFile] = File(.
     stats     = spending_stats(all_rows)
 
     buf = io.BytesIO()
-    export_excel(all_rows, monthly, cats, merchants, anomalies, stats, buf)
+    export_excel(all_rows, monthly, cats, merchants, anomalies, stats, buf, masked=masked)
     buf.seek(0)
+    filename = "SpendStory_Report_Anonymized.xlsx" if masked else "SpendStory_Report.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=SpendStory_Report.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

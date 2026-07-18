@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from analyser import (parse_date, parse_amount, extract_merchant, assign_category,
                       detect_anomalies, monthly_summary, category_summary,
                       top_merchants, spending_stats, clean_and_enrich, export_excel,
-                      _match_bank_signature)
+                      _match_bank_signature, fy_summary, _mask_text, _mask_ref)
 
 
 def row(d, narration="x", debit=0.0, credit=0.0, balance=0.0, merchant="m", category="c"):
@@ -144,3 +144,132 @@ def test_detect_bank_sbi_account_summary_layout_not_misdetected_as_hdfc():
 def test_detect_bank_still_finds_hdfc_when_genuinely_hdfc():
     text = "HDFC BANK STATEMENT OF ACCOUNT VALUE DATE NARRATION DEBIT CREDIT"
     assert _match_bank_signature(text) == "HDFC"
+
+
+# ── fy_summary ────────────────────────────────────────────────────────────
+
+def test_fy_summary_groups_april_to_march():
+    rows = [
+        row(date(2026, 3, 15), debit=100.0),   # FY 2025-26 (Jan-Mar belongs to prior FY)
+        row(date(2026, 4, 1), debit=200.0),    # FY 2026-27 (April starts new FY)
+        row(date(2027, 1, 10), debit=50.0),    # FY 2026-27
+    ]
+    fy = fy_summary(rows)
+    by_fy = {y["fy"]: y for y in fy}
+    assert by_fy["FY 2025-26"]["expense"] == 100.0
+    assert by_fy["FY 2026-27"]["expense"] == 250.0
+
+
+def test_fy_summary_sorted_chronologically():
+    rows = [row(date(2027, 5, 1)), row(date(2025, 5, 1)), row(date(2026, 5, 1))]
+    fy = fy_summary(rows)
+    assert [y["fy"] for y in fy] == ["FY 2025-26", "FY 2026-27", "FY 2027-28"]
+
+
+# ── Anonymized-export masking ────────────────────────────────────────────────
+
+def test_mask_text_masks_long_digit_runs():
+    assert _mask_text("ACH-DR-HDFC BANK LIMITED-0000161743135") == "ACH-DR-HDFC BANK LIMITED-*************"
+
+
+def test_mask_text_masks_upi_handle_but_keeps_merchant():
+    assert _mask_text("UPI-SWIGGY-SWIGGY@YBL-1234") == "UPI-SWIGGY-SW***@YBL-1234"
+
+
+def test_mask_text_preserves_person_and_merchant_names():
+    masked = _mask_text("UPI/DR/609178413960/SALEEM K/YESB/q763888035/UPI")
+    assert "SALEEM K" in masked
+    assert "609178413960" not in masked
+
+
+def test_mask_ref_keeps_last_three_chars():
+    assert _mask_ref("0000642625972044") == "XXXXXXXXXXXXX044"
+
+
+def test_mask_ref_short_ref_fully_masked():
+    assert _mask_ref("12") == "**"
+    assert _mask_ref("") == ""
+
+
+# ── New Excel export features ────────────────────────────────────────────────
+
+def _export(rows_, masked=False):
+    monthly, cats, merchants = monthly_summary(rows_), category_summary(rows_), top_merchants(rows_)
+    anomalies = detect_anomalies(rows_)
+    for r in anomalies:
+        r["is_anomaly"] = True
+    stats = spending_stats(rows_)
+    buf = io.BytesIO()
+    export_excel(rows_, monthly, cats, merchants, anomalies, stats, buf, masked=masked)
+    buf.seek(0)
+    return load_workbook(buf)
+
+
+def test_transactions_sheet_has_tax_dropdown_column_and_validation():
+    rows = [row(date(2026, 1, i + 1), debit=100.0) for i in range(3)]
+    wb = _export(rows)
+    ws = wb["Transactions"]
+    assert ws.cell(row=1, column=11).value == "Tax Deductible?"
+    assert len(ws.data_validations.dataValidation) == 1
+    dv = ws.data_validations.dataValidation[0]
+    assert "Yes - Business" in dv.formula1
+
+
+def test_summary_sheet_has_tax_sumif_formula():
+    rows = [row(date(2026, 1, i + 1), debit=100.0) for i in range(3)]
+    wb = _export(rows)
+    ws = wb["Summary"]
+    formulas = [c.value for r in ws.iter_rows() for c in r if isinstance(c.value, str) and c.value.startswith("=SUMIF")]
+    assert any("Transactions!K:K" in f and "Transactions!F:F" in f for f in formulas)
+
+
+def test_summary_sheet_has_fy_breakdown():
+    rows = [row(date(2026, 1, 5), debit=100.0), row(date(2026, 5, 5), debit=200.0)]
+    wb = _export(rows)
+    ws = wb["Summary"]
+    values = [c.value for r in ws.iter_rows() for c in r]
+    assert "FY 2025-26" in values and "FY 2026-27" in values
+
+
+def test_anomaly_hyperlink_targets_correct_transaction_row():
+    rows = [row(date(2026, 1, i + 1), debit=100.0) for i in range(10)]
+    rows.append(row(date(2026, 1, 20), debit=50000.0))  # the anomaly, last row -> row 12 in sheet
+    wb = _export(rows)
+    ws = wb["Anomalies"]
+    jump_cell = ws.cell(row=8, column=6)  # first (only) anomaly data row
+    assert jump_cell.hyperlink is not None
+    assert jump_cell.hyperlink.target == "#'Transactions'!A12"
+
+
+def test_masked_export_scrubs_narration_and_ref():
+    rows = [{"date": date(2026, 1, 5), "narration": "UPI-SWIGGY-SWIGGY@YBL-1234", "debit": 100.0,
+             "credit": 0.0, "balance": 900.0, "merchant": "Swiggy", "category": "Food & Dining",
+             "is_anomaly": False, "ref_no": "0000642625972044", "value_date": date(2026, 1, 5)}]
+    wb = _export(rows, masked=True)
+    ws = wb["Transactions"]
+    assert ws.cell(row=2, column=3).value == "UPI-SWIGGY-SW***@YBL-1234"
+    assert ws.cell(row=2, column=4).value == "XXXXXXXXXXXXX044"
+
+
+def test_unmasked_export_keeps_narration_untouched():
+    rows = [{"date": date(2026, 1, 5), "narration": "UPI-SWIGGY-SWIGGY@YBL-1234", "debit": 100.0,
+             "credit": 0.0, "balance": 900.0, "merchant": "Swiggy", "category": "Food & Dining",
+             "is_anomaly": False, "ref_no": "0000642625972044", "value_date": date(2026, 1, 5)}]
+    wb = _export(rows, masked=False)
+    ws = wb["Transactions"]
+    assert ws.cell(row=2, column=3).value == "UPI-SWIGGY-SWIGGY@YBL-1234"
+
+
+def test_indian_currency_format_applied_to_amount_columns():
+    rows = [row(date(2026, 1, 5), debit=100.0, credit=0.0)]
+    wb = _export(rows)
+    ws = wb["Transactions"]
+    debit_cell = ws.cell(row=2, column=6)
+    assert ">=10000000" in debit_cell.number_format and ">=100000" in debit_cell.number_format
+
+
+def test_freeze_panes_set_on_every_sheet():
+    rows = [row(date(2026, 1, 5), debit=100.0)]
+    wb = _export(rows)
+    for name in ["Transactions", "Monthly Summary", "Categories", "Top Merchants", "Anomalies"]:
+        assert wb[name].freeze_panes is not None, f"{name} has no freeze_panes set"
