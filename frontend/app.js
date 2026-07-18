@@ -149,27 +149,33 @@ async function analyseMulti(files, password) {
   }
 }
 
-/* ── Excel export ──────────────────────────────────────────── */
-$("btn-export").addEventListener("click", async () => {
-  if (isSampleMode) {
-    const el = $("export-error");
-    el.hidden = false;
-    el.textContent = "This is sample data — upload your own statement to download a real report.";
-    return;
-  }
-  if (!pendingFiles.length) return;
-  const btn = $("btn-export");
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Preparing…";
-  $("export-error").hidden = true;
+/* ── Excel export (paid — Razorpay order-then-verify) ─────────
+   Flow: create an order server-side -> open Razorpay's own hosted Checkout
+   (we never see card/UPI details) -> on success, send the payment_id/
+   order_id/signature to /api/export-excel, which verifies the signature
+   server-side before generating anything. If the user closes the Checkout
+   popup without paying, nothing happens — no charge, no file. */
+const EXPORT_BTN_DEFAULT = $("btn-export").textContent;
 
+function setExportError(msg) {
+  const el = $("export-error");
+  el.hidden = !msg;
+  el.textContent = msg || "";
+}
+
+async function downloadReport(payment) {
+  const btn = $("btn-export");
+  btn.disabled = true;
+  btn.textContent = "Generating your report…";
   try {
     const masked = $("mask-toggle").checked;
     const form = new FormData();
     for (const f of pendingFiles) form.append("files", f);
     form.append("password", $("pdf-password").value || "");
     form.append("masked", masked ? "true" : "false");
+    form.append("razorpay_order_id", payment.razorpay_order_id);
+    form.append("razorpay_payment_id", payment.razorpay_payment_id);
+    form.append("razorpay_signature", payment.razorpay_signature);
     const res = await fetch("api/export-excel", { method: "POST", body: form });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -185,12 +191,59 @@ $("btn-export").addEventListener("click", async () => {
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    const el = $("export-error");
-    el.hidden = false;
-    el.textContent = e.message || "Couldn't reach the server. Please try again.";
+    setExportError(e.message || "Payment succeeded but the report failed to generate — please contact support.");
   } finally {
     btn.disabled = false;
-    btn.textContent = original;
+    btn.textContent = EXPORT_BTN_DEFAULT;
+  }
+}
+
+$("btn-export").addEventListener("click", async () => {
+  if (isSampleMode) {
+    return setExportError("This is sample data — upload your own statement to download a real report.");
+  }
+  if (!pendingFiles.length) return;
+  if (typeof Razorpay === "undefined") {
+    return setExportError("Payment widget failed to load — check your connection and try again.");
+  }
+
+  const btn = $("btn-export");
+  btn.disabled = true;
+  btn.textContent = "Starting checkout…";
+  setExportError("");
+
+  try {
+    const res = await fetch("api/create-order", { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Couldn't start checkout.");
+    }
+    const order = await res.json();
+
+    const rzp = new Razorpay({
+      key: order.key_id,
+      amount: order.amount,
+      currency: order.currency,
+      order_id: order.order_id,
+      name: "SpendStory",
+      description: "Deep-Dive Excel Report",
+      theme: { color: "#7c3aed" },
+      handler: (response) => downloadReport(response),
+      modal: {
+        ondismiss: () => {
+          btn.disabled = false;
+          btn.textContent = EXPORT_BTN_DEFAULT;
+        },
+      },
+    });
+    rzp.on("payment.failed", () => setExportError("Payment failed. You have not been charged — please try again."));
+    rzp.open();
+    btn.textContent = EXPORT_BTN_DEFAULT;
+    btn.disabled = false;
+  } catch (e) {
+    setExportError(e.message || "Couldn't reach the server. Please try again.");
+    btn.disabled = false;
+    btn.textContent = EXPORT_BTN_DEFAULT;
   }
 });
 

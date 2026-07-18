@@ -79,6 +79,14 @@
 
   <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
 
+  <div class="sample-showcase">
+    <p class="sample-showcase-label">See the Excel report before you buy — fake data, real formatting:</p>
+    <div class="sample-showcase-links">
+      <a href="samples/SpendStory_Sample_Standard.xlsx" download>📄 Standard sample</a>
+      <a href="samples/SpendStory_Sample_Pro.xlsx" download>🔒 Anonymized (Pro) sample</a>
+    </div>
+  </div>
+
   <div id="password-row" class="password-row" hidden>
     <label for="pdf-password">This PDF is locked. Enter its password:</label>
     <div class="pw-line">
@@ -107,7 +115,7 @@
   <div class="results-head">
     <button id="btn-again" class="btn-ghost">← Analyse another</button>
     <span id="bank-badge" class="bank-badge"></span>
-    <button id="btn-export" class="btn-export" type="button">⬇ Download Excel report</button>
+    <button id="btn-export" class="btn-export" type="button">⬇ Download Excel report — ₹19</button>
   </div>
   <label class="mask-toggle">
     <input type="checkbox" id="mask-toggle">
@@ -171,6 +179,7 @@
 </main>
 
 <script src="vendor/chart.umd.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

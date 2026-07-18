@@ -55,22 +55,62 @@ def test_analyse_multi_rejects_too_many():
     assert r.status_code == 422 and "at most 6" in r.json()["detail"]
 
 
-def test_export_excel_rejects_empty():
-    r = client.post("/api/export-excel", files=[], data={"password": ""})
+def _fake_paid(monkeypatch):
+    """Export is now payment-gated — these tests exercise file-validation
+    logic, which is a separate concern from payment verification, so fake
+    a valid paid state rather than needing a real Razorpay account in CI."""
+    import payments
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_ID", "rzp_test_x")
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_SECRET", "secret123")
+    monkeypatch.setattr(payments, "verify_signature", lambda *a, **k: True)
+
+
+def _paid_data(**extra):
+    return {"password": "", "razorpay_order_id": "o1", "razorpay_payment_id": "p1",
+            "razorpay_signature": "s1", **extra}
+
+
+def test_export_excel_rejects_empty(monkeypatch):
+    _fake_paid(monkeypatch)
+    r = client.post("/api/export-excel", files=[], data=_paid_data())
     assert r.status_code == 422
 
 
-def test_export_excel_rejects_too_many():
+def test_export_excel_rejects_too_many(monkeypatch):
+    _fake_paid(monkeypatch)
     files = [("files", (f"{i}.pdf", b"%PDF-1", "application/pdf")) for i in range(7)]
-    r = client.post("/api/export-excel", files=files, data={"password": ""})
+    r = client.post("/api/export-excel", files=files, data=_paid_data())
     assert r.status_code == 422 and "at most 6" in r.json()["detail"]
 
 
-def test_export_excel_rejects_non_pdf():
+def test_export_excel_rejects_non_pdf(monkeypatch):
+    _fake_paid(monkeypatch)
     r = client.post("/api/export-excel",
                     files=[("files", ("a.txt", b"hello", "application/pdf"))],
-                    data={"password": ""})
+                    data=_paid_data())
     assert r.status_code == 415
+
+
+def test_export_excel_blocked_when_payments_not_configured():
+    r = client.post("/api/export-excel",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data=_paid_data())
+    assert r.status_code == 503
+
+
+def test_export_excel_blocked_on_invalid_signature(monkeypatch):
+    import payments
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_ID", "rzp_test_x")
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_SECRET", "secret123")
+    r = client.post("/api/export-excel",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data=_paid_data(razorpay_signature="forged"))
+    assert r.status_code == 402
+
+
+def test_create_order_blocked_when_not_configured():
+    r = client.post("/api/create-order")
+    assert r.status_code == 503
 
 
 def test_analyse_multi_labels_failing_file():

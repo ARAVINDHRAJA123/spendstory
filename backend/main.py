@@ -35,6 +35,7 @@ from analyser import (  # noqa: E402
     top_merchants,
 )
 from insights import find_recurring_subscriptions  # noqa: E402
+import payments  # noqa: E402
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
 MAX_PDF_PAGES = 80          # statements rarely exceed this; caps CPU per request
@@ -77,11 +78,15 @@ async def security_headers(request: Request, call_next):
     resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        # checkout.razorpay.com is Razorpay's own hosted payment widget —
+        # it handles card/UPI details directly with Razorpay; we never see
+        # or touch that data ourselves, only the payment result.
+        "script-src 'self' https://checkout.razorpay.com; "
+        "frame-src https://api.razorpay.com; "
         "style-src 'self' 'unsafe-inline'; "
         "font-src 'self'; "
-        "img-src 'self' data:; "
-        "connect-src 'self'"
+        "img-src 'self' data: https://*.razorpay.com; "
+        "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com"
     )
     return resp
 
@@ -230,19 +235,54 @@ async def analyse_multi(request: Request, files: list[UploadFile] = File(...), p
     return JSONResponse(_bundle(all_rows, banks))
 
 
+@app.post("/api/create-order")
+async def create_order(request: Request):
+    """Creates a Razorpay order for one Excel report (₹19, one-time — see
+    payments.PRICE_PAISE). Returns the order id + the PUBLIC key id the
+    frontend needs to open Razorpay's Checkout widget. Never returns the
+    secret key — that stays server-side, used only to verify the payment
+    after the fact in /api/export-excel."""
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many requests from this device right now — please wait a few minutes and try again.")
+    if not payments.payments_configured():
+        raise HTTPException(503, "Payments aren't set up on this server yet.")
+    try:
+        order = payments.create_order()
+    except payments.PaymentError as e:
+        raise HTTPException(502, str(e))
+    return JSONResponse({
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "currency": order["currency"],
+        "key_id": payments.RAZORPAY_KEY_ID,
+    })
+
+
 @app.post("/api/export-excel")
 async def export_excel_report(request: Request, files: list[UploadFile] = File(...),
-                               password: str = Form(default=""), masked: bool = Form(default=False)):
+                               password: str = Form(default=""), masked: bool = Form(default=False),
+                               razorpay_order_id: str = Form(default=""),
+                               razorpay_payment_id: str = Form(default=""),
+                               razorpay_signature: str = Form(default="")):
     """Re-parses the uploaded statement(s) (stateless, same privacy model as
     /api/analyse) and streams back a multi-sheet Excel report — summary,
     transactions, monthly/category/merchant breakdowns, anomalies. Nothing
     is written to disk; the workbook is built entirely in memory.
+
+    Paid feature: requires a verified Razorpay payment (see /api/create-order
+    and payments.verify_signature) — the signature is the only thing that
+    actually proves payment happened, so it's checked server-side before any
+    parsing work starts, not just trusted from the client.
 
     masked=True scrubs UPI handles/account-number fragments out of the
     Narration and Ref No columns (amounts, dates, categories untouched) —
     for sharing the file with a CA/advisor without exposing raw account IDs."""
     if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
+    if not payments.payments_configured():
+        raise HTTPException(503, "Payments aren't set up on this server yet.")
+    if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
+        raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
     if not files:
         raise HTTPException(422, "Upload a statement to export.")
     if len(files) > 6:
