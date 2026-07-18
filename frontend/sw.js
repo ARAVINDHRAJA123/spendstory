@@ -3,9 +3,8 @@
    instantly and works offline; NEVER cache /api responses — financial
    results must stay in memory only. */
 
-// Bump this on every deploy that changes any SHELL file — stale-while-revalidate
-// otherwise leaves returning visitors on a mismatched mix of old/new assets.
-const CACHE = "spendstory-v5";
+// Bump this on every deploy that changes any SHELL file.
+const CACHE = "spendstory-v6";
 const SHELL = [
   ".",
   "index.html",
@@ -37,24 +36,27 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+/* Network-first: always try the network so a fresh deploy shows up on the
+   very next load, not one load behind (the old stale-while-revalidate
+   strategy served the cached copy first — meaning a returning visitor's
+   FIRST load after any deploy always showed the previous version, e.g.
+   missing a newly-added <script> tag entirely). Cache is only a fallback
+   for offline use now. Same fix already proven in the ats-checker project. */
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.pathname.includes("/api/")) return; // network only
-
-  // Stale-while-revalidate: serve cache fast, refresh in background.
-  // The revalidation fetch also bypasses HTTP cache, for the same reason as install.
+  // Only handle our own same-origin app assets. Third-party embeds (the
+  // Razorpay Checkout script, in particular) get opaque, sometimes-redirected
+  // responses that this cache/fetch logic isn't built to handle —
+  // intercepting them risks the script intermittently failing to load.
+  // Let the browser fetch those natively instead.
+  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.includes("/api/")) return;
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const fresh = fetch(e.request, { cache: "reload" })
-        .then((res) => {
-          if (res.ok && url.origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fresh;
-    })
+    fetch(e.request, { cache: "reload" }).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });

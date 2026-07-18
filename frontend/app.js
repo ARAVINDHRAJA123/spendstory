@@ -615,7 +615,26 @@ function closeDrawer() {
 $("btn-history").addEventListener("click", () =>
   $("drawer").classList.contains("open") ? closeDrawer() : openDrawer());
 $("drawer-backdrop").addEventListener("click", closeDrawer);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDrawer(); closeBanksPopover(); } });
+
+/* ── Supported-banks popover ──────────────────────────────────
+   Moved out of the dropzone (was cluttering it with a wall of text) into a
+   small on-demand popover — same open/close pattern as the history drawer. */
+function openBanksPopover() {
+  $("banks-popover").hidden = false;
+  $("btn-banks").setAttribute("aria-expanded", "true");
+}
+function closeBanksPopover() {
+  $("banks-popover").hidden = true;
+  $("btn-banks").setAttribute("aria-expanded", "false");
+}
+$("btn-banks").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("banks-popover").hidden ? openBanksPopover() : closeBanksPopover();
+});
+document.addEventListener("click", (e) => {
+  if (!$("banks-popover").hidden && !e.target.closest(".banks-dropdown")) closeBanksPopover();
+});
 $("btn-clear-history").addEventListener("click", () => {
   localStorage.removeItem(HIST_KEY);
   renderHistory();
@@ -644,6 +663,8 @@ function applyTheme(next) {
 $("btn-theme").addEventListener("click", (ev) => {
   const next = currentTheme() === "dark" ? "light" : "dark";
   if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const topbar = document.querySelector(".topbar");
+    topbar.classList.add("no-blur");
     const r = ev.currentTarget.getBoundingClientRect();
     const x = r.left + r.width / 2, y = r.top + r.height / 2;
     const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
@@ -654,6 +675,7 @@ $("btn-theme").addEventListener("click", (ev) => {
         { duration: 600, easing: "cubic-bezier(.22,1,.36,1)", pseudoElement: "::view-transition-new(root)" },
       );
     });
+    vt.finished.then(() => topbar.classList.remove("no-blur"));
   } else {
     applyTheme(next);
   }

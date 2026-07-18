@@ -28,9 +28,27 @@
       <span>SpendStory</span>
     </div>
   </div>
-  <span class="privacy-pill" title="Your statement is analysed and immediately discarded. Nothing is stored.">
-    🔒 Nothing is stored
-  </span>
+  <div class="topbar-right">
+    <div class="banks-dropdown">
+      <button id="btn-banks" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
+        🏦 Supported banks <span class="caret">▾</span>
+      </button>
+      <div id="banks-popover" class="banks-popover" role="menu" hidden>
+        <div class="banks-popover-title">Auto-detected from your PDF</div>
+        <ul>
+          <li>HDFC Bank</li>
+          <li>State Bank of India</li>
+          <li>Axis Bank</li>
+          <li>Punjab National Bank</li>
+          <li>Indian Overseas Bank</li>
+          <li>City Union Bank</li>
+        </ul>
+      </div>
+    </div>
+    <span class="privacy-pill" title="Your statement is analysed and immediately discarded. Nothing is stored.">
+      🔒 Nothing is stored
+    </span>
+  </div>
 </header>
 
 <!-- ── Past analyses drawer (this device only) ── -->
@@ -65,16 +83,14 @@
   </section>
 
   <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload your bank statement PDF">
-    <svg viewBox="0 0 24 24" width="44" height="44" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
       <path d="M12 16V4m0 0l-4 4m4-4l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
     <p class="dz-title">Tap to choose your statement</p>
     <p class="dz-hint">or drag &amp; drop the PDF here</p>
-    <p class="dz-banks">Works with HDFC · SBI · Axis · PNB · IOB · CUB</p>
     <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
-    <p class="dz-hint dz-password-hint">🔒 Password-protected? No worries — you can unlock it on the next step.</p>
-    <p class="dz-hint" style="margin-top:8px">💡 You can select and drop multiple bank statements at once to see a combined dashboard.</p>
+    <p class="dz-hint dz-tips">🔒 Locked PDF? Unlock it on the next step · 💡 Drop 2+ statements to merge them</p>
   </div>
 
   <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
