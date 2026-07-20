@@ -596,8 +596,12 @@ function renderHistory() {
       const e = loadHist()[+li.dataset.i];
       if (!e) return;
       closeDrawer();
+      pendingFiles = []; // history keeps only a summary, never the original PDF
       show("results");
       render(e.data);
+      const exportBtn = $("btn-export");
+      exportBtn.disabled = true;
+      exportBtn.title = "This is a past analysis — we don't keep your original PDF (nothing is stored), so re-upload the statement to download a fresh Excel report.";
     }));
 }
 
