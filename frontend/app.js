@@ -624,10 +624,14 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawe
 /* ── Topbar dropdowns (banks / sample data) ───────────────────
    Small on-demand popovers — same open/close pattern as the history drawer.
    wireDropdown handles both so they share open/close/outside-click logic. */
+let closeOpenDropdown = null; // only one topbar popover open at a time
 function wireDropdown(btnId, popoverId) {
   const btn = $(btnId), pop = $(popoverId);
-  const open = () => { pop.hidden = false; btn.setAttribute("aria-expanded", "true"); };
-  const close = () => { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  const close = () => { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); if (closeOpenDropdown === close) closeOpenDropdown = null; };
+  const open = () => {
+    if (closeOpenDropdown) closeOpenDropdown();
+    pop.hidden = false; btn.setAttribute("aria-expanded", "true"); closeOpenDropdown = close;
+  };
   btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
   document.addEventListener("click", (e) => {
     if (!pop.hidden && !e.target.closest(`#${btnId}`) && !e.target.closest(`#${popoverId}`)) close();
