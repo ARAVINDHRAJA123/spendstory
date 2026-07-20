@@ -619,26 +619,36 @@ function closeDrawer() {
 $("btn-history").addEventListener("click", () =>
   $("drawer").classList.contains("open") ? closeDrawer() : openDrawer());
 $("drawer-backdrop").addEventListener("click", closeDrawer);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDrawer(); closeBanksPopover(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 
-/* ── Supported-banks popover ──────────────────────────────────
-   Moved out of the dropzone (was cluttering it with a wall of text) into a
-   small on-demand popover — same open/close pattern as the history drawer. */
-function openBanksPopover() {
-  $("banks-popover").hidden = false;
-  $("btn-banks").setAttribute("aria-expanded", "true");
+/* ── Topbar dropdowns (banks / sample data) ───────────────────
+   Small on-demand popovers — same open/close pattern as the history drawer.
+   wireDropdown handles both so they share open/close/outside-click logic. */
+function wireDropdown(btnId, popoverId) {
+  const btn = $(btnId), pop = $(popoverId);
+  const open = () => { pop.hidden = false; btn.setAttribute("aria-expanded", "true"); };
+  const close = () => { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
+  document.addEventListener("click", (e) => {
+    if (!pop.hidden && !e.target.closest(`#${btnId}`) && !e.target.closest(`#${popoverId}`)) close();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  return close;
 }
-function closeBanksPopover() {
-  $("banks-popover").hidden = true;
-  $("btn-banks").setAttribute("aria-expanded", "false");
-}
-$("btn-banks").addEventListener("click", (e) => {
+wireDropdown("btn-banks", "banks-popover");
+wireDropdown("btn-sample", "sample-popover");
+
+/* Privacy tooltip: :hover/:focus-visible show it via CSS on desktop; this
+   adds tap-to-show (with auto-hide) for touch devices, where hover never fires. */
+let privacyTipTimer;
+$("btn-privacy").addEventListener("click", (e) => {
   e.stopPropagation();
-  $("banks-popover").hidden ? openBanksPopover() : closeBanksPopover();
+  const tip = $("privacy-tip");
+  tip.classList.add("show");
+  clearTimeout(privacyTipTimer);
+  privacyTipTimer = setTimeout(() => tip.classList.remove("show"), 3000);
 });
-document.addEventListener("click", (e) => {
-  if (!$("banks-popover").hidden && !e.target.closest(".banks-dropdown")) closeBanksPopover();
-});
+document.addEventListener("click", () => $("privacy-tip").classList.remove("show"));
 $("btn-clear-history").addEventListener("click", () => {
   localStorage.removeItem(HIST_KEY);
   renderHistory();

@@ -45,9 +45,28 @@
         </ul>
       </div>
     </div>
-    <span class="privacy-pill" title="Your statement is analysed and immediately discarded. Nothing is stored.">
-      🔒 Nothing is stored
-    </span>
+    <div class="privacy-tip-wrap">
+      <button id="btn-privacy" class="btn-privacy" type="button" aria-describedby="privacy-tip">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <span id="privacy-tip" class="privacy-tip" role="tooltip">🔒 Your statement is analysed and immediately discarded — nothing is stored</span>
+    </div>
+    <div class="banks-dropdown">
+      <button id="btn-sample" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
+        🧪 Sample data <span class="caret">▾</span>
+      </button>
+      <div id="sample-popover" class="banks-popover" role="menu" hidden>
+        <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
+        <p class="sample-showcase-label">See the Excel report before you buy:</p>
+        <div class="sample-showcase-links">
+          <a href="samples/SpendStory_Sample_Standard.xlsx" download>📄 Standard sample</a>
+          <a href="samples/SpendStory_Sample_Pro.xlsx" download>🔒 Anonymized (Pro) sample</a>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -93,15 +112,6 @@
     <p class="dz-hint dz-tips">🔒 Locked PDF? Unlock it on the next step.<br>💡 Drop 2+ statements to merge them.</p>
   </div>
 
-  <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
-
-  <div class="sample-showcase">
-    <p class="sample-showcase-label">See the Excel report before you buy — fake data, real formatting:</p>
-    <div class="sample-showcase-links">
-      <a href="samples/SpendStory_Sample_Standard.xlsx" download>📄 Standard sample</a>
-      <a href="samples/SpendStory_Sample_Pro.xlsx" download>🔒 Anonymized (Pro) sample</a>
-    </div>
-  </div>
 
   <div id="password-row" class="password-row" hidden>
     <label for="pdf-password">This PDF is locked. Enter its password:</label>
