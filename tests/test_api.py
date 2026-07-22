@@ -108,6 +108,53 @@ def test_export_excel_blocked_on_invalid_signature(monkeypatch):
     assert r.status_code == 402
 
 
+def test_export_tally_blocked_when_payments_not_configured():
+    r = client.post("/api/export-tally",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data=_paid_data())
+    assert r.status_code == 503
+
+
+def test_export_accounting_csv_blocked_when_payments_not_configured():
+    r = client.post("/api/export-accounting-csv",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data=_paid_data())
+    assert r.status_code == 503
+
+
+def test_export_tally_blocked_on_invalid_signature(monkeypatch):
+    import payments
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_ID", "rzp_test_x")
+    monkeypatch.setattr(payments, "RAZORPAY_KEY_SECRET", "secret123")
+    r = client.post("/api/export-tally",
+                    files=[("files", ("a.pdf", b"%PDF-1", "application/pdf"))],
+                    data=_paid_data(razorpay_signature="forged"))
+    assert r.status_code == 402
+
+
+def test_build_tally_xml_well_formed():
+    import xml.etree.ElementTree as ET
+    from datetime import date
+    from export_accounting import build_tally_xml
+    rows = [
+        {"date": date(2026, 1, 15), "narration": "Swiggy", "debit": 500.0, "credit": 0.0, "merchant": "Swiggy", "category": "Food"},
+        {"date": date(2026, 1, 20), "narration": "Salary", "debit": 0.0, "credit": 68000.0, "merchant": "Acme", "category": "Salary"},
+    ]
+    root = ET.fromstring(build_tally_xml(rows))
+    vouchers = root.findall(".//VOUCHER")
+    assert len(vouchers) == 2
+    assert {v.get("VCHTYPE") for v in vouchers} == {"Payment", "Receipt"}
+
+
+def test_build_accounting_csv_shape():
+    from datetime import date
+    from export_accounting import build_accounting_csv
+    rows = [{"date": date(2026, 1, 15), "narration": "Swiggy", "debit": 500.0, "credit": 0.0}]
+    out = build_accounting_csv(rows).decode()
+    assert out.splitlines()[0] == "Date,Description,Amount"
+    assert "-500.00" in out
+
+
 def test_create_order_blocked_when_not_configured():
     r = client.post("/api/create-order")
     assert r.status_code == 503

@@ -163,33 +163,42 @@ function setExportError(msg) {
   el.textContent = msg || "";
 }
 
+let lastVerifiedPayment = null; // reused for the extra formats below — same paid unlock, no re-charge
+
+async function downloadFormat(payment, endpoint, filename) {
+  const masked = $("mask-toggle").checked;
+  const form = new FormData();
+  for (const f of pendingFiles) form.append("files", f);
+  form.append("password", $("pdf-password").value || "");
+  form.append("masked", masked ? "true" : "false");
+  form.append("razorpay_order_id", payment.razorpay_order_id);
+  form.append("razorpay_payment_id", payment.razorpay_payment_id);
+  form.append("razorpay_signature", payment.razorpay_signature);
+  const res = await fetch(endpoint, { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || "Couldn't generate the file.");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function downloadReport(payment) {
   const btn = $("btn-export");
   btn.disabled = true;
   btn.textContent = "Generating your report…";
   try {
     const masked = $("mask-toggle").checked;
-    const form = new FormData();
-    for (const f of pendingFiles) form.append("files", f);
-    form.append("password", $("pdf-password").value || "");
-    form.append("masked", masked ? "true" : "false");
-    form.append("razorpay_order_id", payment.razorpay_order_id);
-    form.append("razorpay_payment_id", payment.razorpay_payment_id);
-    form.append("razorpay_signature", payment.razorpay_signature);
-    const res = await fetch("api/export-excel", { method: "POST", body: form });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || "Couldn't generate the report.");
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    await downloadFormat(payment, "api/export-excel", masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx");
+    lastVerifiedPayment = payment;
+    $("other-formats").hidden = false;
   } catch (e) {
     setExportError(e.message || "Payment succeeded but the report failed to generate — please contact support.");
   } finally {
@@ -197,6 +206,17 @@ async function downloadReport(payment) {
     btn.textContent = EXPORT_BTN_DEFAULT;
   }
 }
+
+$("btn-export-tally")?.addEventListener("click", async () => {
+  if (!lastVerifiedPayment) return;
+  try { await downloadFormat(lastVerifiedPayment, "api/export-tally", "SpendStory_Tally_Import.xml"); }
+  catch (e) { setExportError(e.message); }
+});
+$("btn-export-csv")?.addEventListener("click", async () => {
+  if (!lastVerifiedPayment) return;
+  try { await downloadFormat(lastVerifiedPayment, "api/export-accounting-csv", "SpendStory_Accounting_Import.csv"); }
+  catch (e) { setExportError(e.message); }
+});
 
 $("btn-export").addEventListener("click", async () => {
   if (isSampleMode) {

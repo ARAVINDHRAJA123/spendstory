@@ -35,6 +35,7 @@ from analyser import (  # noqa: E402
     top_merchants,
 )
 from insights import find_recurring_subscriptions  # noqa: E402
+from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E402
 import payments  # noqa: E402
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
@@ -308,6 +309,65 @@ async def export_excel_report(request: Request, files: list[UploadFile] = File(.
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+async def _verified_rows(request: Request, files: list[UploadFile], password: str,
+                          razorpay_order_id: str, razorpay_payment_id: str, razorpay_signature: str) -> list[dict]:
+    """Shared payment-check + re-parse used by every paid export format.
+    Same already-verified payment triple can be reused across formats —
+    HMAC verification doesn't care how many times it's checked, so a
+    buyer can download Excel, then Tally XML, then the CSV, from one
+    ₹19 purchase without paying again."""
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
+    if not payments.payments_configured():
+        raise HTTPException(503, "Payments aren't set up on this server yet.")
+    if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
+        raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
+    if not files:
+        raise HTTPException(422, "Upload a statement to export.")
+    if len(files) > 6:
+        raise HTTPException(422, "Please export at most 6 statements at a time.")
+    all_rows: list[dict] = []
+    for f in files:
+        blob = await f.read()
+        result = _parse_one(blob, password, label=f.filename or "file")
+        all_rows.extend(result["rows"])
+    return all_rows
+
+
+@app.post("/api/export-tally")
+async def export_tally(request: Request, files: list[UploadFile] = File(...),
+                        password: str = Form(default=""), masked: bool = Form(default=False),
+                        razorpay_order_id: str = Form(default=""), razorpay_payment_id: str = Form(default=""),
+                        razorpay_signature: str = Form(default="")):
+    """Tally Prime XML import — one Payment/Receipt voucher per transaction.
+    Best-effort scaffolding, not a certified sync: ledger names come
+    straight from merchant/category and will likely need reclassifying
+    inside Tally after import (see export_accounting.py's module docstring)."""
+    rows = await _verified_rows(request, files, password, razorpay_order_id, razorpay_payment_id, razorpay_signature)
+    xml_bytes = build_tally_xml(rows, masked=masked)
+    return StreamingResponse(
+        io.BytesIO(xml_bytes),
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=SpendStory_Tally_Import.xml"},
+    )
+
+
+@app.post("/api/export-accounting-csv")
+async def export_accounting_csv_report(request: Request, files: list[UploadFile] = File(...),
+                                        password: str = Form(default=""), masked: bool = Form(default=False),
+                                        razorpay_order_id: str = Form(default=""), razorpay_payment_id: str = Form(default=""),
+                                        razorpay_signature: str = Form(default="")):
+    """3-column Date/Description/Amount CSV — the shape QuickBooks Online,
+    Zoho Books, and Wave all accept for manual bank-transaction import."""
+    rows = await _verified_rows(request, files, password, razorpay_order_id, razorpay_payment_id, razorpay_signature)
+    csv_bytes = build_accounting_csv(rows, masked=masked)
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=SpendStory_Accounting_Import.csv"},
     )
 
 
