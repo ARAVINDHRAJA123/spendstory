@@ -291,8 +291,12 @@ class _FakeIOBPDF:
         self.pages = pages
 
 
-def _iob_word(text, x0, top):
-    return {"text": text, "x0": x0, "top": top}
+def _iob_word(text, x0, top, x1=None):
+    # Real IOB debit/credit/balance amounts are right-aligned: x1 (right
+    # edge) stays stable regardless of digit count while x0 shifts — tests
+    # that plant an amount word pass an explicit x1 to mimic that; other
+    # words just get a plausible default width.
+    return {"text": text, "x0": x0, "top": top, "x1": x1 if x1 is not None else x0 + 20}
 
 
 def _iob_header():
@@ -303,7 +307,7 @@ def test_iob_short_narration_parses_normally():
     words = _iob_header() + [
         _iob_word("01-Nov-25", 49, 225),
         _iob_word("UPI-SWIGGY-abc", 115, 225),
-        _iob_word("500.00", 415, 225),
+        _iob_word("500.00", 415, 225, x1=440),
     ]
     rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
     assert len(rows) == 1
@@ -324,7 +328,7 @@ def test_iob_long_narration_no_longer_truncated_at_ref_column():
         _iob_word("UPI/merchant/xyz", 200, 250),
         _iob_word("long", 285, 250),          # spills past narration's x1=278
         _iob_word("description", 320, 250),   # spills further
-        _iob_word("900.00", 415, 250),
+        _iob_word("900.00", 415, 250, x1=440),
     ]
     rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
     assert len(rows) == 1
@@ -337,9 +341,46 @@ def test_iob_real_reference_code_still_goes_to_ref_not_narration():
         _iob_word("06-Nov-25", 49, 270),
         _iob_word("NEFT-payment", 115, 270),
         _iob_word("IOBR52401234567", 285, 270),
-        _iob_word("300.00", 415, 270),
+        _iob_word("300.00", 415, 270, x1=440),
     ]
     rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
     assert len(rows) == 1
     assert rows[0]["narration"] == "NEFT-payment"
     assert rows[0]["ref_no"] == "IOBR52401234567"
+
+
+def test_iob_large_amount_not_misbucketed_into_type_column():
+    """Regression test for a real bug found against an actual IOB
+    statement: a 7-digit debit amount's LEFT edge (x0) shifts far enough
+    left that it falls inside the "type" column's nominal x0 range
+    (343-408), and since columns used to be checked by x0 in a fixed
+    order with "type" before "debit", the amount got silently claimed by
+    "type" and never reached debit/credit — a real ₹4,99,000 transaction
+    showed up as debit=0.0. Debit/credit/balance are now matched by their
+    RIGHT edge (x1), which stays stable regardless of digit count, and
+    checked before "type" so a wide amount can't be shadowed by it."""
+    words = _iob_header() + [
+        _iob_word("08-Oct-25", 49, 225),
+        _iob_word("RTGS-PUNB-BIGLOAN", 115, 225),
+        _iob_word("Transfer", 344, 225),      # genuine "type" word, x1≈374 — must not be swallowed
+        _iob_word("4,99,000.00", 397, 225, x1=440),  # wide amount, x0 strays into type's x0 range
+    ]
+    rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
+    assert len(rows) == 1
+    assert rows[0]["debit"] == 499000.0
+    assert rows[0]["narration"] == "RTGS-PUNB-BIGLOAN"
+
+
+def test_iob_narration_not_misbucketed_as_date_at_boundary():
+    """Regression test: narration text observed starting at x0≈111.9 (just
+    under the old hard 112 cutoff, due to sub-pixel rendering) used to
+    land in the "date" bucket instead of "narration" and get lost. The
+    date/narration boundary now has a small buffer (105 instead of 112)."""
+    words = _iob_header() + [
+        _iob_word("08-Oct-25", 49, 225),
+        _iob_word("BorderlineText", 111.9, 225),
+        _iob_word("300.00", 415, 225, x1=440),
+    ]
+    rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
+    assert len(rows) == 1
+    assert rows[0]["narration"] == "BorderlineText"

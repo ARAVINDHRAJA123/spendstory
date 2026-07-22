@@ -371,13 +371,28 @@ def _extract_cub(pdf) -> list[dict]:
 # "-" placeholder in the empty column parses as 0.0 automatically.
 
 IOB_COLS = [
-    ("date",      44, 112),
-    ("narration", 112, 278),
-    ("ref",       278, 343),
-    ("type",      343, 408),
-    ("debit",     408, 462),
-    ("credit",    462, 510),
-    ("balance",   510, 700),
+    # debit/credit/balance are checked FIRST, before "type": they're
+    # right-aligned numbers whose left edge (x0) shifts with digit count (a
+    # 7-digit amount starts well left of a 3-digit one) while the right
+    # edge (x1) is rock-stable regardless of width — confirmed against a
+    # real statement: debit always ends at x1≈440, credit≈499, balance≈558.
+    # A 7-digit debit's x0 (397) falls inside "type"'s x0 range (343-408);
+    # if type were checked first it would wrongly claim the word via x0
+    # before the x1 check ever ran. Checking these by x1 first means a
+    # genuine "type" word (e.g. "Transfer", x1≈374) never matches them
+    # (374 is below all three x1 ranges) so it still falls through correctly.
+    ("debit",    390, 450, "x1"),
+    ("credit",   450, 505, "x1"),
+    ("balance",  505, 600, "x1"),
+    # date/narration boundary has a few px of buffer (105 instead of a hard
+    # 112 cutoff): real narration text has been observed starting at
+    # x0≈111.9, which is technically < 112 due to sub-pixel rendering —
+    # without the buffer that lands in "date" instead. Nothing legitimately
+    # renders in the 50-105 gap (dates cluster at x0≈44-50), so this is safe.
+    ("date",      44, 105, "x0"),
+    ("narration", 105, 278, "x0"),
+    ("ref",       278, 343, "x0"),
+    ("type",      343, 408, "x0"),
 ]
 
 IOB_STOP_MARKERS = ("AVAILABLEBALANCE", "COMPUTERGENERATEDSTATEMENT", "DOESNOTREQUIRE")
@@ -429,8 +444,9 @@ def _extract_iob(pdf) -> list[dict]:
 
             buckets: dict[str, list[str]] = {n: [] for n, *_ in IOB_COLS}
             for w in sorted(all_words, key=lambda x: (x["top"], x["x0"])):
-                for name, x0, x1 in IOB_COLS:
-                    if x0 <= w["x0"] < x1:
+                for name, lo, hi, coord in IOB_COLS:
+                    pos = w["x0"] if coord == "x0" else w["x1"]
+                    if lo <= pos < hi:
                         buckets[name].append(w["text"])
                         break
 
