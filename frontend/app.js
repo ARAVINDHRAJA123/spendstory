@@ -223,14 +223,23 @@ $("btn-export").addEventListener("click", async () => {
     return setExportError("This is sample data — upload your own statement to download a real report.");
   }
   if (!pendingFiles.length) return;
+
+  const btn = $("btn-export");
+  setExportError("");
+
+  // Temporary QA mode (SPENDSTORY_EXPORTS_FREE=true server-side) — skip
+  // Razorpay entirely, backend ignores the empty signature while it's on.
+  const statusRes = await fetch("api/exports-status").catch(() => null);
+  const status = statusRes && statusRes.ok ? await statusRes.json() : { free: false };
+  if (status.free) {
+    return downloadReport({ razorpay_order_id: "", razorpay_payment_id: "", razorpay_signature: "" });
+  }
+
   if (typeof Razorpay === "undefined") {
     return setExportError("Payment widget failed to load — check your connection and try again.");
   }
-
-  const btn = $("btn-export");
   btn.disabled = true;
   btn.textContent = "Starting checkout…";
-  setExportError("");
 
   try {
     const res = await fetch("api/create-order", { method: "POST" });

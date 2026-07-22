@@ -39,6 +39,12 @@ from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E40
 import payments  # noqa: E402
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
+
+# Temporary QA bypass — set SPENDSTORY_EXPORTS_FREE=true to skip the ₹19
+# paywall entirely on every export endpoint (Excel/Tally/CSV), for testing
+# output quality without paying. Unset (or set to anything else) to restore
+# the normal paid gate — nothing else changes, same code path either way.
+EXPORTS_FREE = os.environ.get("SPENDSTORY_EXPORTS_FREE", "").strip().lower() == "true"
 MAX_PDF_PAGES = 80          # statements rarely exceed this; caps CPU per request
 PARSE_TIMEOUT_S = 60        # a pathological PDF can't hold a worker hostage
 RATE_LIMIT = 20             # analyses per IP per window
@@ -236,6 +242,13 @@ async def analyse_multi(request: Request, files: list[UploadFile] = File(...), p
     return JSONResponse(_bundle(all_rows, banks))
 
 
+@app.get("/api/exports-status")
+async def exports_status():
+    """Lets the frontend know whether to skip Razorpay Checkout entirely
+    (temporary QA mode — see EXPORTS_FREE above)."""
+    return {"free": EXPORTS_FREE}
+
+
 @app.post("/api/create-order")
 async def create_order(request: Request):
     """Creates a Razorpay order for one Excel report (₹19, one-time — see
@@ -280,10 +293,11 @@ async def export_excel_report(request: Request, files: list[UploadFile] = File(.
     for sharing the file with a CA/advisor without exposing raw account IDs."""
     if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
-    if not payments.payments_configured():
-        raise HTTPException(503, "Payments aren't set up on this server yet.")
-    if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
-        raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
+    if not EXPORTS_FREE:
+        if not payments.payments_configured():
+            raise HTTPException(503, "Payments aren't set up on this server yet.")
+        if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
+            raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
     if not files:
         raise HTTPException(422, "Upload a statement to export.")
     if len(files) > 6:
@@ -321,10 +335,11 @@ async def _verified_rows(request: Request, files: list[UploadFile], password: st
     ₹19 purchase without paying again."""
     if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
-    if not payments.payments_configured():
-        raise HTTPException(503, "Payments aren't set up on this server yet.")
-    if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
-        raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
+    if not EXPORTS_FREE:
+        if not payments.payments_configured():
+            raise HTTPException(503, "Payments aren't set up on this server yet.")
+        if not payments.verify_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature):
+            raise HTTPException(402, "Payment verification failed. If you were charged, please contact support.")
     if not files:
         raise HTTPException(422, "Upload a statement to export.")
     if len(files) > 6:
