@@ -199,6 +199,8 @@ async function downloadReport(payment) {
     await downloadFormat(payment, "api/export-excel", masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx");
     lastVerifiedPayment = payment;
     $("other-formats").hidden = false;
+    const hint = document.querySelector(".export-formats-hint");
+    if (hint) hint.hidden = true;
   } catch (e) {
     setExportError(e.message || "Payment succeeded but the report failed to generate — please contact support.");
   } finally {

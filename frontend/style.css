@@ -222,6 +222,14 @@ body {
 .mask-toggle input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
 .mask-toggle:hover { color: var(--ink); }
 
+/* ── Export panel: config (anonymize) -> action (buy) -> extras (other
+   formats), grouped in one card instead of scattered across the results
+   header, so it reads as a single coherent decision instead of clutter. */
+.export-panel { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.export-panel .mask-toggle { margin: 0; }
+.export-formats-hint { font-size: 12.5px; color: var(--muted); margin: -2px 0 0; }
+.export-panel .error, .export-panel .other-formats { margin: 0; }
+
 /* ── Password ── */
 .password-row { max-width: 560px; margin: 18px auto 0; background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); animation: rise .35s ease both; }
 .password-row label { font-weight: 600; }

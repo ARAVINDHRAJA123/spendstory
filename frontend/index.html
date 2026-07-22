@@ -144,18 +144,22 @@
   <div class="results-head">
     <button id="btn-again" class="btn-ghost">← Analyse another</button>
     <span id="bank-badge" class="bank-badge"></span>
-    <button id="btn-export" class="btn-export" type="button">⬇ Download Excel report — ₹19</button>
   </div>
-  <label class="mask-toggle">
-    <input type="checkbox" id="mask-toggle">
-    🔒 Anonymize account IDs &amp; UPI handles — for sharing with a CA/advisor
-  </label>
-  <p id="export-error" class="error" role="alert" hidden></p>
-  <p id="other-formats" class="other-formats" hidden>Also included with your purchase:
-    <button id="btn-export-tally" class="btn-mini" type="button">Tally XML</button>
-    <button id="btn-export-csv" class="btn-mini" type="button">QuickBooks/Zoho CSV</button>
-  </p>
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
+
+  <div class="card export-panel">
+    <label class="mask-toggle">
+      <input type="checkbox" id="mask-toggle">
+      🔒 Anonymize account IDs &amp; UPI handles — for sharing with a CA/advisor
+    </label>
+    <button id="btn-export" class="btn-export" type="button">⬇ Download report — ₹19</button>
+    <p class="export-formats-hint">Excel · Tally XML · QuickBooks/Zoho CSV — one purchase, every format</p>
+    <p id="other-formats" class="other-formats" hidden>
+      Also download: <button id="btn-export-tally" class="btn-mini" type="button">Tally XML</button>
+      <button id="btn-export-csv" class="btn-mini" type="button">QuickBooks/Zoho CSV</button>
+    </p>
+    <p id="export-error" class="error" role="alert" hidden></p>
+  </div>
 
   <section class="cards">
     <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></button>
