@@ -9,7 +9,8 @@ from openpyxl import load_workbook
 from analyser import (parse_date, parse_amount, extract_merchant, assign_category,
                       detect_anomalies, monthly_summary, category_summary,
                       top_merchants, spending_stats, clean_and_enrich, export_excel,
-                      _match_bank_signature, fy_summary, _mask_text, _mask_ref)
+                      _match_bank_signature, fy_summary, _mask_text, _mask_ref,
+                      _extract_iob)
 
 
 def row(d, narration="x", debit=0.0, credit=0.0, balance=0.0, merchant="m", category="c"):
@@ -273,3 +274,72 @@ def test_freeze_panes_set_on_every_sheet():
     wb = _export(rows)
     for name in ["Transactions", "Monthly Summary", "Categories", "Top Merchants", "Anomalies"]:
         assert wb[name].freeze_panes is not None, f"{name} has no freeze_panes set"
+
+
+# ── IOB word-based parser — previously zero coverage ─────────────────────
+# Fake pdfplumber page/pdf: _extract_iob only needs pdf.pages[i].extract_words().
+class _FakeIOBPage:
+    def __init__(self, words):
+        self._words = words
+
+    def extract_words(self, x_tolerance=3, y_tolerance=3):
+        return self._words
+
+
+class _FakeIOBPDF:
+    def __init__(self, pages):
+        self.pages = pages
+
+
+def _iob_word(text, x0, top):
+    return {"text": text, "x0": x0, "top": top}
+
+
+def _iob_header():
+    return [_iob_word("Date(Value", 49, 205)]
+
+
+def test_iob_short_narration_parses_normally():
+    words = _iob_header() + [
+        _iob_word("01-Nov-25", 49, 225),
+        _iob_word("UPI-SWIGGY-abc", 115, 225),
+        _iob_word("500.00", 415, 225),
+    ]
+    rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
+    assert len(rows) == 1
+    assert rows[0]["narration"] == "UPI-SWIGGY-abc"
+    assert rows[0]["debit"] == 500.0
+
+
+def test_iob_long_narration_no_longer_truncated_at_ref_column():
+    """Regression test for a real bug: narration text overflowing past the
+    fixed-width narration column (x < 278) into the neighbouring ref-number
+    column's x-range used to be silently dropped, truncating narrations
+    like 'Pay on UPI/merchant/xyz long description' down to just 'Pay on
+    UPI/merchant/xyz' — the exact shape of a real user-reported issue."""
+    words = _iob_header() + [
+        _iob_word("05-Nov-25", 49, 250),
+        _iob_word("Pay", 115, 250),
+        _iob_word("on", 140, 250),
+        _iob_word("UPI/merchant/xyz", 200, 250),
+        _iob_word("long", 285, 250),          # spills past narration's x1=278
+        _iob_word("description", 320, 250),   # spills further
+        _iob_word("900.00", 415, 250),
+    ]
+    rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
+    assert len(rows) == 1
+    assert rows[0]["narration"] == "Pay on UPI/merchant/xyz long description"
+    assert rows[0]["ref_no"] == ""
+
+
+def test_iob_real_reference_code_still_goes_to_ref_not_narration():
+    words = _iob_header() + [
+        _iob_word("06-Nov-25", 49, 270),
+        _iob_word("NEFT-payment", 115, 270),
+        _iob_word("IOBR52401234567", 285, 270),
+        _iob_word("300.00", 415, 270),
+    ]
+    rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
+    assert len(rows) == 1
+    assert rows[0]["narration"] == "NEFT-payment"
+    assert rows[0]["ref_no"] == "IOBR52401234567"

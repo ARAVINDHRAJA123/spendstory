@@ -381,6 +381,7 @@ IOB_COLS = [
 ]
 
 IOB_STOP_MARKERS = ("AVAILABLEBALANCE", "COMPUTERGENERATEDSTATEMENT", "DOESNOTREQUIRE")
+IOB_REF_CODE_RE = re.compile(r"^[A-Z0-9\-/]{4,}$")  # compact alphanumeric ref code, no lowercase/plain words
 
 def _extract_iob(pdf) -> list[dict]:
     rows = []
@@ -442,7 +443,18 @@ def _extract_iob(pdf) -> list[dict]:
             if not date:
                 continue
 
-            narr_str = " ".join(t for t in buckets["narration"] if t)
+            # A long narration can visually overflow the fixed-width narration
+            # column (112-278px) into the neighbouring "ref" bucket's x-range
+            # — the PDF has no real cell boundary stopping it, so words just
+            # keep flowing right. A genuine IOB reference code is a compact
+            # alphanumeric token (e.g. "IOBR52401234567"); ordinary narration
+            # words that spilled over don't match that shape — reclaim them
+            # instead of silently losing the rest of the narration.
+            ref_tokens = [t for t in buckets["ref"] if t]
+            spillover = [t for t in ref_tokens if not IOB_REF_CODE_RE.match(t)]
+            real_ref = [t for t in ref_tokens if IOB_REF_CODE_RE.match(t)]
+
+            narr_str = " ".join([t for t in buckets["narration"] if t] + spillover)
             dbt_str  = " ".join(d for d in buckets["debit"]  if d != "-")
             crd_str  = " ".join(c for c in buckets["credit"] if c != "-")
             bal_str  = " ".join(buckets["balance"])
@@ -450,7 +462,7 @@ def _extract_iob(pdf) -> list[dict]:
             rows.append({
                 "date":       date,
                 "narration":  narr_str,
-                "ref_no":     " ".join(buckets["ref"]),
+                "ref_no":     " ".join(real_ref),
                 "value_date": date,
                 "debit":      parse_amount(dbt_str),
                 "credit":     parse_amount(crd_str),
