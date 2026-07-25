@@ -635,25 +635,27 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
 .headline-sub { margin-top: 7px !important; font-size: 14px !important; color: var(--muted); line-height: 1.55 !important; }
 .headline-sub b { color: var(--ink); font-weight: 700; }
 
-/* ── Section nav ── */
+/* ── Section nav ──
+   No bar behind the links — each link is its own floating pill (a solid
+   background + shadow, not a strip spanning the row), so what's sticky is
+   a handful of buttons, not a bar that reads as a stray UI layer. */
 .section-nav {
   display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px;
-  padding-bottom: 2px; scrollbar-width: none;
+  padding: 2px 2px 8px; scrollbar-width: none;
   /* Sticky under the topbar so it stays reachable through a long scroll. */
   /* --topbar-h is measured in app.js: the topbar wraps to two rows on
      narrow screens, so a hard-coded offset parks this nav underneath it. */
   position: sticky; top: calc(var(--topbar-h, 66px) + 2px); z-index: 4;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(10px);
 }
 .section-nav::-webkit-scrollbar { display: none; }
 .section-nav a {
   flex: none; font-size: 13px; font-weight: 600; text-decoration: none;
   color: var(--muted); background: var(--card); border: 1.5px solid var(--line);
   border-radius: 999px; padding: 6px 13px;
-  transition: color .15s ease, background .15s ease;
+  box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  transition: color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.section-nav a:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--card)); }
+.section-nav a:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--card)); box-shadow: 0 3px 14px rgba(0,0,0,.12); transform: translateY(-1px); }
 /* Anchor jumps must clear the sticky topbar + this nav, or the heading
    lands underneath them. */
 #cats-card, #mom-card, #subscription-card, #anomaly-card, #txn-card {
@@ -682,11 +684,10 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
   background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
   padding: 14px; box-shadow: var(--shadow);
   display: grid; gap: 12px;
-  /* Deliberately soft and low-contrast: it's a hint of the layout, not
-     something to be read or mistaken for real figures. */
-  opacity: .62; filter: blur(.4px);
-  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent);
-  mask-image: linear-gradient(180deg, #000 62%, transparent);
+  /* Muted via colour/contrast alone, not filter:blur or a mask fade — those
+     read as an out-of-focus/broken image rather than a deliberate sketch.
+     "Not real data" is communicated by the shapes having no numbers or
+     labels at all, not by making them hard to see. */
 }
 .peek-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .peek-stats span { height: 34px; border-radius: 9px; background: color-mix(in srgb, var(--brand) 16%, var(--bg)); }

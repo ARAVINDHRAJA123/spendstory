@@ -1183,8 +1183,12 @@ function applyTheme(next) {
 $("btn-theme").addEventListener("click", (ev) => {
   const next = currentTheme() === "dark" ? "light" : "dark";
   if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    const topbar = document.querySelector(".topbar");
-    topbar.classList.add("no-blur");
+    // Both the topbar and the sticky section-nav use backdrop-filter, and
+    // both show the same one-frame stutter during the circular wipe (see
+    // .topbar.no-blur's comment) — either one left blurred flashes
+    // whatever's behind it for a frame.
+    const blurred = [document.querySelector(".topbar"), $("section-nav")].filter(Boolean);
+    blurred.forEach((el) => el.classList.add("no-blur"));
     const r = ev.currentTarget.getBoundingClientRect();
     const x = r.left + r.width / 2, y = r.top + r.height / 2;
     const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
@@ -1195,7 +1199,7 @@ $("btn-theme").addEventListener("click", (ev) => {
         { duration: 600, easing: "cubic-bezier(.22,1,.36,1)", pseudoElement: "::view-transition-new(root)" },
       );
     });
-    vt.finished.then(() => topbar.classList.remove("no-blur"));
+    vt.finished.then(() => blurred.forEach((el) => el.classList.remove("no-blur")));
   } else {
     applyTheme(next);
   }
