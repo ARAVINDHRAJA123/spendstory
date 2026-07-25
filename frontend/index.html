@@ -133,6 +133,29 @@
 
   <p id="upload-error" class="error" role="alert" hidden></p>
 
+  <!-- A shape-only sketch of the dashboard, not a screenshot: it shows what
+       you get in about a second, with no real figures to mistake for your
+       own and no image asset to ship. aria-hidden — it says nothing a
+       screen reader can use that the copy above doesn't already say. -->
+  <section class="preview-peek" aria-hidden="true">
+    <p class="preview-label">What you'll get</p>
+    <div class="peek">
+      <div class="peek-stats">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="peek-body">
+        <div class="peek-donut"></div>
+        <div class="peek-lines">
+          <i style="--w:88%"></i><i style="--w:64%"></i><i style="--w:47%"></i><i style="--w:31%"></i><i style="--w:22%"></i>
+        </div>
+      </div>
+      <div class="peek-bars">
+        <i style="--h:42%"></i><i style="--h:70%"></i><i style="--h:35%"></i><i style="--h:88%"></i>
+        <i style="--h:55%"></i><i style="--h:76%"></i><i style="--h:48%"></i><i style="--h:62%"></i>
+      </div>
+    </div>
+  </section>
+
   <section class="trust" id="trust-strip">
     <div class="trust-item"><span>🔒</span><div><b>Private</b><small>Analysed in memory, deleted instantly</small></div></div>
     <div class="trust-item"><span>⚡</span><div><b>Fast</b><small>Results in a few seconds</small></div></div>
@@ -154,6 +177,19 @@
   </div>
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
 
+  <section class="headline" id="headline" hidden>
+    <p id="headline-text"></p>
+    <p id="headline-sub" class="headline-sub"></p>
+  </section>
+
+  <nav class="section-nav" id="section-nav" aria-label="Jump to a section">
+    <a href="#cats-card">Categories</a>
+    <a href="#mom-card" data-optional>Vs last month</a>
+    <a href="#subscription-card" data-optional>Subscriptions</a>
+    <a href="#anomaly-card" data-optional>Unusual</a>
+    <a href="#txn-card">Transactions</a>
+  </nav>
+
   <div class="card export-panel">
     <button id="btn-export" class="btn-export btn-export-green" type="button">⬇ Download report — ₹49</button>
     <p class="export-formats-hint">Excel · Tally XML · QuickBooks/Zoho CSV — one purchase, every format</p>
@@ -161,10 +197,10 @@
   </div>
 
   <section class="cards">
-    <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit"><small>Money out</small><b id="stat-spend" class="neg">₹0</b></button>
-    <button class="card stat filterable" id="stat-income-card" type="button" data-filter="credit"><small>Money in</small><b id="stat-income" class="pos">₹0</b></button>
-    <div class="card stat"><small>Net</small><b id="stat-net">₹0</b></div>
-    <div class="card stat"><small>Transactions</small><b id="stat-count">0</b></div>
+    <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit"><small>Money out</small><b id="stat-spend" class="neg">₹0</b><span class="spark" id="spark-spend"></span></button>
+    <button class="card stat filterable" id="stat-income-card" type="button" data-filter="credit"><small>Money in</small><b id="stat-income" class="pos">₹0</b><span class="spark" id="spark-income"></span></button>
+    <div class="card stat"><small>Net</small><b id="stat-net">₹0</b><span class="spark" id="spark-net"></span></div>
+    <div class="card stat"><small>Transactions</small><b id="stat-count">0</b><span class="spark" id="spark-count"></span></div>
   </section>
 
   <section class="grid2">
@@ -184,12 +220,13 @@
     </div>
   </section>
 
-  <section class="card" id="mom-card" hidden>
+  <section class="card" id="mom-card">
     <div class="mom-head">
       <h2>📊 <span id="mom-title">This month vs last</span></h2>
       <p class="muted" id="mom-sub"></p>
     </div>
-    <div class="mom-hero">
+    <p id="mom-single" class="empty-state" hidden>Only one month in this statement, so there's nothing to compare it against yet. Drop in a second month's PDF — or both at once — to see what changed.</p>
+    <div class="mom-hero" id="mom-hero">
       <div class="mom-metric">
         <small>Money out</small>
         <b id="mom-spend">₹0</b>
@@ -214,16 +251,18 @@
   <section class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></section>
 
   <section class="grid2">
-    <div class="card" id="anomaly-card" hidden>
+    <div class="card" id="anomaly-card">
       <h2>⚠️ Unusually large payments</h2>
       <p class="muted">These are much bigger than your typical spend — worth a quick look.</p>
+      <p id="anomaly-empty" class="empty-state" hidden>✅ Nothing stood out. Every payment here is in line with how you normally spend.</p>
       <ul id="anomaly-list" class="anomaly-list"></ul>
     </div>
 
-    <div class="card" id="subscription-card" hidden>
+    <div class="card" id="subscription-card">
       <h2>🔁 Recurring subscriptions</h2>
       <p class="muted">Same amount, roughly every month — the auto-renewing charges easiest to forget about.</p>
-      <div class="sub-total">
+      <p id="sub-empty" class="empty-state" hidden>✅ No auto-renewing charges found. Nothing here is quietly billing you every month.</p>
+      <div class="sub-total" id="sub-total">
         <div class="sub-total-main">
           <span class="sub-total-label">If you cancelled every one of these, you'd keep</span>
           <b id="sub-total-year">₹0</b>
@@ -235,7 +274,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="txn-card">
     <h2>All transactions</h2>
     <p class="muted txn-hint">Wrong category? Tap it to fix — the change sticks for that merchant, on this device.</p>
     <p id="cat-override-note" class="cat-override-note" hidden>

@@ -4,7 +4,7 @@
    results must stay in memory only. */
 
 // Bump this on every deploy that changes any SHELL file.
-const CACHE = "spendstory-v16";
+const CACHE = "spendstory-v17";
 const SHELL = [
   ".",
   "index.html",

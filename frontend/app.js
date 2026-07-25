@@ -427,17 +427,23 @@ function render(d) {
 
   buildCharts(d);
 
-  // Anomalies
-  $("anomaly-card").hidden = d.anomalies.length === 0;
+  // Anomalies — the card stays put with an explicit "nothing found", which
+  // is a real result, not an absence worth hiding.
+  $("anomaly-empty").hidden = d.anomalies.length > 0;
   $("anomaly-list").innerHTML = d.anomalies.slice(0, 6).map((a) => `
     <li><div class="m-left"><div class="m-name">${esc(a.merchant)}</div><small class="muted">${fmtDate(a.date)}</small></div>
     <span class="amount neg">−${INR.format(a.debit)}</span></li>`).join("");
 
   renderMoM(d);
+  renderHeadline(d);
+  renderSparklines(d);
+  renderSectionNav();
 
   // Recurring subscriptions
-  $("subscription-card").hidden = d.subscriptions.length === 0;
-  renderSubTotal(d.subscriptions);
+  const hasSubs = d.subscriptions.length > 0;
+  $("sub-empty").hidden = hasSubs;
+  $("sub-total").hidden = !hasSubs;
+  if (hasSubs) renderSubTotal(d.subscriptions);
   $("subscription-list").innerHTML = d.subscriptions.slice(0, 6).map((s) => `
     <li><div class="m-left"><div class="m-name">${esc(s.merchant)}</div>
     <small class="muted">every ~${s.avg_interval_days}d · next ~${fmtDate(s.next_expected)} · ${INR.format(s.annual_cost)}/yr</small></div>
@@ -598,21 +604,36 @@ function buildCharts(d) {
     },
   };
 
+  const sortedMonths = monthsSorted(d);
   charts.push(new Chart($("chart-months"), {
     type: "bar",
     data: {
-      labels: d.monthly.map((m) => m.month),
+      // Sorted: monthly_summary() emits months in first-seen order, so an
+      // out-of-order statement drew Feb before Jan on the x-axis.
+      labels: sortedMonths.map((m) => m.month),
       datasets: [
-        { label: "In", data: d.monthly.map((m) => m.income), backgroundColor: barGradient("#10b981", "rgba(16,185,129,.35)"), borderRadius: topRadius },
-        { label: "Out", data: d.monthly.map((m) => m.expense), backgroundColor: barGradient("#ef4444", "rgba(239,68,68,.35)"), borderRadius: topRadius },
+        { label: "In", data: sortedMonths.map((m) => m.income), backgroundColor: barGradient("#10b981", "rgba(16,185,129,.35)"), borderRadius: topRadius },
+        { label: "Out", data: sortedMonths.map((m) => m.expense), backgroundColor: barGradient("#ef4444", "rgba(239,68,68,.35)"), borderRadius: topRadius },
       ],
     },
     plugins: [barGlowPlugin],
     options: {
       maintainAspectRatio: false,
       animation: { duration: 900, easing: "easeOutCubic" },
-      scales: { y: { ticks: { callback: (v) => "₹" + (v >= 1000 ? (v / 1000) + "k" : v) }, grid: { color: "rgba(128,128,128,.15)" } }, x: { grid: { display: false } } },
-      plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${INR.format(c.parsed.y)}` } } },
+      // categoryPercentage/barPercentage: Chart.js defaults pack the two
+      // bars in a month flush against each other and nearly fill the slot,
+      // which reads as one striped block rather than two values.
+      datasets: { bar: { categoryPercentage: 0.68, barPercentage: 0.86 } },
+      scales: {
+        y: { ticks: { callback: (v) => "₹" + (v >= 1000 ? (v / 1000) + "k" : v), padding: 6 },
+             border: { display: false }, grid: { color: "rgba(128,128,128,.15)", drawTicks: false } },
+        x: { grid: { display: false }, border: { display: false }, ticks: { padding: 6 } },
+      },
+      plugins: {
+        legend: { labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true, pointStyle: "circle", padding: 16 } },
+        tooltip: { cornerRadius: 8, padding: 10, boxPadding: 4,
+                   callbacks: { label: (c) => ` ${c.dataset.label}: ${INR.format(c.parsed.y)}` } },
+      },
     },
   }));
 }
@@ -776,13 +797,18 @@ function renderSubTotal(subs) {
    full months to say anything honest, so with one month the card stays
    hidden rather than showing a comparison against nothing. */
 function renderMoM(d) {
-  const card = $("mom-card");
-  // monthly_summary() keys months as "Jan 2026" in first-seen order, which
-  // is not chronological — sort before picking "the last two months".
-  const months = (d.monthly || []).filter((m) => m.month)
-    .slice().sort((a, b) => monthOrd(a.month) - monthOrd(b.month));
-  if (months.length < 2) { card.hidden = true; return; }
-  card.hidden = false;
+  const months = monthsSorted(d);
+  const single = months.length < 2;
+  $("mom-single").hidden = !single;
+  $("mom-hero").hidden = single;
+  $("mom-cats").hidden = single;
+  document.querySelector(".mom-sub-head").hidden = single;
+  if (single) {
+    $("mom-title").textContent = "Compare with another month";
+    $("mom-sub").textContent = "";
+    $("mom-empty").hidden = true;
+    return;
+  }
 
   const cur = months[months.length - 1], prev = months[months.length - 2];
   $("mom-title").textContent = `${cur.month} vs ${prev.month}`;
@@ -840,6 +866,131 @@ const monthOrd = (label) => {
   const d = new Date("1 " + label);
   return isNaN(d) ? 0 : d.getFullYear() * 12 + d.getMonth();
 };
+
+/* Months in chronological order. monthly_summary() keys them "Jan 2026" in
+   first-seen order, which is not sortable as a string and not necessarily
+   in date order. */
+const monthsSorted = (d) =>
+  (d.monthly || []).filter((m) => m.month).slice().sort((a, b) => monthOrd(a.month) - monthOrd(b.month));
+
+/* ── Headline ─────────────────────────────────────────────────
+   One sentence at the top so the page has an obvious entry point instead
+   of nine equally-weighted cards. Everything here is derived from figures
+   already on screen — it restates them, it never introduces a new claim. */
+function renderHeadline(d) {
+  const el = $("headline"), text = $("headline-text"), sub = $("headline-sub");
+  const months = monthsSorted(d);
+  const spend = d.stats.total_spend;
+  if (!spend && !d.stats.total_income) { el.hidden = true; return; }
+  el.hidden = false;
+
+  const topCat = (d.categories || []).filter((c) => c.category !== "Salary / Income" && c.category !== "Other Income")[0];
+  const period = months.length === 1 ? `in ${months[0].month}`
+    : months.length ? `across ${months.length} months` : "in this statement";
+
+  let main = `You spent <b>${INR.format(spend)}</b> ${period}`;
+  if (topCat) main += `, most of it on <b>${esc(topCat.category)}</b>`;
+  text.innerHTML = main + ".";
+
+  const bits = [];
+  if (months.length >= 2) {
+    const cur = months[months.length - 1], prev = months[months.length - 2];
+    const diff = cur.expense - prev.expense;
+    bits.push(Math.abs(diff) < 1
+      ? `Spending held steady between ${prev.month} and ${cur.month}.`
+      : `That's <b>${INR.format(Math.abs(diff))} ${diff > 0 ? "more" : "less"}</b> in ${cur.month} than ${prev.month}.`);
+  }
+  const subs = d.subscriptions || [];
+  if (subs.length) {
+    const yearly = subs.reduce((sum, x) => sum + (x.annual_cost || 0), 0);
+    bits.push(`${subs.length} recurring charge${subs.length === 1 ? "" : "s"} cost you <b>${INR.format(yearly)}</b> a year.`);
+  }
+  if ((d.anomalies || []).length) {
+    bits.push(`${d.anomalies.length} payment${d.anomalies.length === 1 ? " was" : "s were"} unusually large.`);
+  }
+  sub.innerHTML = bits.join(" ");
+  sub.hidden = bits.length === 0;
+}
+
+/* ── Sparklines ───────────────────────────────────────────────
+   Inline SVG rather than a charting library: four more Chart.js instances
+   for eight data points each would cost far more than the polyline they'd
+   draw. Needs at least two months — a single point is not a trend, so the
+   card just shows its number, as before. */
+function sparkline(values, color) {
+  if (values.length < 2) return "";
+  const W = 100, H = 26, pad = 2;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * W;
+    const y = H - pad - ((v - min) / span) * (H - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const last = pts[pts.length - 1].split(",");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="2.4" fill="${color}"/>
+  </svg>`;
+}
+
+function renderSparklines(d) {
+  const months = monthsSorted(d);
+  // Transaction counts aren't in monthly_summary, so they're counted here
+  // from the same rows the table renders.
+  const counts = new Map(months.map((m) => [m.month, 0]));
+  for (const t of d.transactions || []) {
+    const k = monthLabel(t.date);
+    if (counts.has(k)) counts.set(k, counts.get(k) + 1);
+  }
+  const css = (name) => getComputedStyle(document.body).getPropertyValue(name).trim();
+  const neg = css("--neg") || "#ef4444", pos = css("--pos") || "#10b981", brand = css("--brand") || "#7c3aed";
+  $("spark-spend").innerHTML = sparkline(months.map((m) => m.expense), neg);
+  $("spark-income").innerHTML = sparkline(months.map((m) => m.income), pos);
+  $("spark-net").innerHTML = sparkline(months.map((m) => m.income - m.expense), brand);
+  $("spark-count").innerHTML = sparkline(months.map((m) => counts.get(m.month) || 0), brand);
+}
+
+/* ── Section nav ──────────────────────────────────────────────
+   The results page is a long scroll on a phone. Links to cards that can be
+   empty are dropped rather than left pointing at a hidden section. */
+/* The topbar wraps to two rows on narrow screens, so its height isn't a
+   constant the CSS can assume. Measured here and published as a variable
+   the sticky offset and anchor scroll-margin both read. */
+function measureStickyOffsets() {
+  const bar = document.querySelector(".topbar"), nav = $("section-nav");
+  if (bar) document.documentElement.style.setProperty("--topbar-h", `${Math.round(bar.getBoundingClientRect().height)}px`);
+  if (nav) document.documentElement.style.setProperty("--nav-h", `${Math.round(nav.getBoundingClientRect().height)}px`);
+}
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(measureStickyOffsets);
+  ro.observe(document.querySelector(".topbar"));
+  ro.observe($("section-nav"));
+}
+window.addEventListener("resize", measureStickyOffsets);
+window.addEventListener("orientationchange", measureStickyOffsets);
+/* Also recomputed on scroll, throttled to one measurement per frame. The
+   ResizeObserver is the primary signal, but its callback is deferred and
+   doesn't run at all while the tab is backgrounded — so a rotation or
+   window resize that happens off-screen would leave a stale offset, and
+   the nav would park in the wrong place the moment the user scrolled.
+   Scroll is exactly when the offset has to be right. */
+let stickyTick = false;
+window.addEventListener("scroll", () => {
+  if (stickyTick) return;
+  stickyTick = true;
+  requestAnimationFrame(() => { stickyTick = false; measureStickyOffsets(); });
+}, { passive: true });
+measureStickyOffsets();
+
+function renderSectionNav() {
+  measureStickyOffsets();
+  for (const a of document.querySelectorAll("#section-nav a[data-optional]")) {
+    const target = document.querySelector(a.getAttribute("href"));
+    a.hidden = !target || target.hidden;
+  }
+}
 
 function setDelta(valueId, deltaId, cur, prev, lowerIsBetter) {
   $(valueId).textContent = INR.format(cur);

@@ -623,6 +623,92 @@ tbody tr { cursor: default; transition: background .12s ease; }
 tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 tr.flag td { background: color-mix(in srgb, var(--neg) 7%, transparent); }
 tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+/* ── Headline band: the page's entry point ── */
+.headline {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, var(--card)), var(--card) 70%);
+  border: 1.5px solid color-mix(in srgb, var(--brand) 28%, transparent);
+  border-radius: var(--radius); padding: clamp(16px, 3vw, 22px) clamp(18px, 3.5vw, 26px);
+  margin-bottom: 16px; animation: rise .5s ease both;
+}
+.headline p { margin: 0; font-size: clamp(17px, 2.6vw, 21px); line-height: 1.45; letter-spacing: -.01em; }
+.headline b { font-weight: 800; color: var(--brand); }
+.headline-sub { margin-top: 7px !important; font-size: 14px !important; color: var(--muted); line-height: 1.55 !important; }
+.headline-sub b { color: var(--ink); font-weight: 700; }
+
+/* ── Section nav ── */
+.section-nav {
+  display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px;
+  padding-bottom: 2px; scrollbar-width: none;
+  /* Sticky under the topbar so it stays reachable through a long scroll. */
+  /* --topbar-h is measured in app.js: the topbar wraps to two rows on
+     narrow screens, so a hard-coded offset parks this nav underneath it. */
+  position: sticky; top: calc(var(--topbar-h, 66px) + 2px); z-index: 4;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+.section-nav::-webkit-scrollbar { display: none; }
+.section-nav a {
+  flex: none; font-size: 13px; font-weight: 600; text-decoration: none;
+  color: var(--muted); background: var(--card); border: 1.5px solid var(--line);
+  border-radius: 999px; padding: 6px 13px;
+  transition: color .15s ease, background .15s ease;
+}
+.section-nav a:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--card)); }
+/* Anchor jumps must clear the sticky topbar + this nav, or the heading
+   lands underneath them. */
+#cats-card, #mom-card, #subscription-card, #anomaly-card, #txn-card {
+  scroll-margin-top: calc(var(--topbar-h, 66px) + var(--nav-h, 44px) + 12px);
+}
+
+/* ── KPI sparklines ── */
+.spark { display: block; height: 26px; margin-top: 6px; opacity: .9; }
+.spark svg { width: 100%; height: 26px; display: block; }
+.spark:empty { display: none; }
+
+/* ── Empty states ── */
+.empty-state {
+  font-size: 14px; color: var(--muted); line-height: 1.6;
+  background: var(--bg); border: 1.5px dashed var(--line);
+  border-radius: 12px; padding: 14px 16px; margin: 12px 0 0;
+}
+
+/* ── Upload-screen preview sketch ── */
+.preview-peek { max-width: 680px; margin: 22px auto 0; width: 100%; animation: rise .6s .3s ease both; }
+.preview-label {
+  text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-bottom: 10px;
+}
+.peek {
+  background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
+  padding: 14px; box-shadow: var(--shadow);
+  display: grid; gap: 12px;
+  /* Deliberately soft and low-contrast: it's a hint of the layout, not
+     something to be read or mistaken for real figures. */
+  opacity: .62; filter: blur(.4px);
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent);
+  mask-image: linear-gradient(180deg, #000 62%, transparent);
+}
+.peek-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.peek-stats span { height: 34px; border-radius: 9px; background: color-mix(in srgb, var(--brand) 16%, var(--bg)); }
+.peek-body { display: grid; grid-template-columns: 84px 1fr; gap: 16px; align-items: center; }
+.peek-donut {
+  width: 84px; height: 84px; border-radius: 50%;
+  background: conic-gradient(#8b5cf6 0 38%, #06b6d4 0 62%, #f59e0b 0 80%, #ef4444 0 92%, #10b981 0);
+  -webkit-mask: radial-gradient(circle, transparent 56%, #000 57%);
+  mask: radial-gradient(circle, transparent 56%, #000 57%);
+}
+.peek-lines { display: grid; gap: 9px; }
+.peek-lines i { display: block; height: 9px; width: var(--w); border-radius: 999px; background: color-mix(in srgb, var(--brand) 26%, var(--bg)); }
+.peek-bars { display: flex; align-items: flex-end; gap: 7px; height: 62px; }
+.peek-bars i {
+  flex: 1; height: var(--h); border-radius: 5px 5px 0 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pos) 55%, transparent), color-mix(in srgb, var(--pos) 12%, transparent));
+}
+@media (max-width: 480px) {
+  .peek-body { grid-template-columns: 64px 1fr; }
+  .peek-donut { width: 64px; height: 64px; }
+}
+
 /* ── Month-over-month card ── */
 .mom-head h2 { margin-bottom: 2px; }
 .mom-head .muted { font-size: 13px; margin-bottom: 14px; }
