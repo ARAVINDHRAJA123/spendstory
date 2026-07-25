@@ -155,7 +155,7 @@
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
 
   <div class="card export-panel">
-    <button id="btn-export" class="btn-export btn-export-green" type="button">⬇ Download report — ₹19</button>
+    <button id="btn-export" class="btn-export btn-export-green" type="button">⬇ Download report — ₹49</button>
     <p class="export-formats-hint">Excel · Tally XML · QuickBooks/Zoho CSV — one purchase, every format</p>
     <p id="export-error" class="error" role="alert" hidden></p>
   </div>
@@ -184,6 +184,33 @@
     </div>
   </section>
 
+  <section class="card" id="mom-card" hidden>
+    <div class="mom-head">
+      <h2>📊 <span id="mom-title">This month vs last</span></h2>
+      <p class="muted" id="mom-sub"></p>
+    </div>
+    <div class="mom-hero">
+      <div class="mom-metric">
+        <small>Money out</small>
+        <b id="mom-spend">₹0</b>
+        <span class="delta" id="mom-spend-delta"></span>
+      </div>
+      <div class="mom-metric">
+        <small>Money in</small>
+        <b id="mom-income">₹0</b>
+        <span class="delta" id="mom-income-delta"></span>
+      </div>
+      <div class="mom-metric">
+        <small>Net</small>
+        <b id="mom-net">₹0</b>
+        <span class="delta" id="mom-net-delta"></span>
+      </div>
+    </div>
+    <h3 class="mom-sub-head">What moved the most</h3>
+    <ul id="mom-cats" class="mom-cats"></ul>
+    <p id="mom-empty" class="muted" hidden>Category spending was flat between these two months.</p>
+  </section>
+
   <section class="card"><h2>Month by month</h2><div class="chart-wrap"><canvas id="chart-months"></canvas></div></section>
 
   <section class="grid2">
@@ -196,12 +223,25 @@
     <div class="card" id="subscription-card" hidden>
       <h2>🔁 Recurring subscriptions</h2>
       <p class="muted">Same amount, roughly every month — the auto-renewing charges easiest to forget about.</p>
+      <div class="sub-total">
+        <div class="sub-total-main">
+          <span class="sub-total-label">If you cancelled every one of these, you'd keep</span>
+          <b id="sub-total-year">₹0</b>
+          <span class="sub-total-unit">a year</span>
+        </div>
+        <div class="sub-total-meta"><span id="sub-total-month">₹0</span> a month across <span id="sub-total-count">0</span></div>
+      </div>
       <ul id="subscription-list" class="subscription-list"></ul>
     </div>
   </section>
 
   <section class="card">
     <h2>All transactions</h2>
+    <p class="muted txn-hint">Wrong category? Tap it to fix — the change sticks for that merchant, on this device.</p>
+    <p id="cat-override-note" class="cat-override-note" hidden>
+      <span id="cat-override-count"></span>
+      <button id="btn-reset-cats" class="btn-mini" type="button">Reset all</button>
+    </p>
     <input type="search" id="txn-search" placeholder="Search — e.g. swiggy, rent…" aria-label="Search transactions">
     <p id="txn-filter-note" class="txn-filter-note" hidden></p>
     <div class="txn-scroll"><table id="txn-table">
@@ -213,6 +253,11 @@
 
   <footer class="foot">SpendStory · your statement was analysed in memory and has already been deleted.</footer>
 </main>
+
+<!-- Category picker: one popover reused by every row, positioned on open.
+     A per-row menu would mean one hidden <ul> per transaction — on a
+     1000-row statement that's 1000 dead subtrees in the DOM. -->
+<div id="cat-menu" class="cat-menu" role="menu" hidden></div>
 
 <!-- ── Download picker modal ──────────────────────────────────
      Opened by the export button. One purchase unlocks every format, so
@@ -259,7 +304,7 @@
     <p id="dl-error" class="error" role="alert" hidden></p>
   </div>
   <div class="app-modal-foot">
-    <button id="btn-dl-confirm" class="btn-export btn-export-green" type="button">⬇ Download — ₹19</button>
+    <button id="btn-dl-confirm" class="btn-export btn-export-green" type="button">⬇ Download — ₹49</button>
     <p class="modal-foot-note">Paid once per statement · secure Razorpay checkout · we never see your card details</p>
   </div>
 </div>

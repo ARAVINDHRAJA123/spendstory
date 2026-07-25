@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import time
+import zipfile
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
@@ -34,13 +35,13 @@ from analyser import (  # noqa: E402
     spending_stats,
     top_merchants,
 )
-from insights import find_recurring_subscriptions  # noqa: E402
+from insights import find_recurring_subscriptions, monthly_trend  # noqa: E402
 from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E402
 import payments  # noqa: E402
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
 
-# Temporary QA bypass — set SPENDSTORY_EXPORTS_FREE=true to skip the ₹19
+# Temporary QA bypass — set SPENDSTORY_EXPORTS_FREE=true to skip the ₹49
 # paywall entirely on every export endpoint (Excel/Tally/CSV), for testing
 # output quality without paying. Unset (or set to anything else) to restore
 # the normal paid gate — nothing else changes, same code path either way.
@@ -200,6 +201,7 @@ def _bundle(rows: list[dict], banks: list[str]) -> dict:
         "banks": list(dict.fromkeys(banks)),
         "stats": spending_stats(rows),
         "monthly": monthly_summary(rows),
+        "trend": monthly_trend(monthly_summary(rows)),
         "categories": category_summary(rows),
         "merchants": top_merchants(rows),
         "anomalies": [_txn(r) for r in rows if r.get("is_anomaly")],
@@ -251,7 +253,7 @@ async def exports_status():
 
 @app.post("/api/create-order")
 async def create_order(request: Request):
-    """Creates a Razorpay order for one Excel report (₹19, one-time — see
+    """Creates a Razorpay order for one report (₹49, one-time — see
     payments.PRICE_PAISE). Returns the order id + the PUBLIC key id the
     frontend needs to open Razorpay's Checkout widget. Never returns the
     secret key — that stays server-side, used only to verify the payment
@@ -326,13 +328,33 @@ async def export_excel_report(request: Request, files: list[UploadFile] = File(.
     )
 
 
+def _excel_bytes(rows: list[dict], masked: bool) -> bytes:
+    buf = io.BytesIO()
+    export_excel(rows, monthly_summary(rows), category_summary(rows), top_merchants(rows),
+                 [r for r in rows if r.get("is_anomaly")], spending_stats(rows), buf, masked=masked)
+    return buf.getvalue()
+
+
+# format key -> (filename builder, bytes builder). One place to add a format.
+_BUNDLE_BUILDERS = {
+    "excel": (lambda m: "SpendStory_Report_Anonymized.xlsx" if m else "SpendStory_Report.xlsx", _excel_bytes),
+    "tally": (lambda m: "SpendStory_Tally_Import.xml", lambda rows, m: build_tally_xml(rows, masked=m)),
+    "csv":   (lambda m: "SpendStory_Accounting_Import.csv", lambda rows, m: build_accounting_csv(rows, masked=m)),
+}
+_BUNDLE_MEDIA = {
+    "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "tally": "application/xml",
+    "csv": "text/csv",
+}
+
+
 async def _verified_rows(request: Request, files: list[UploadFile], password: str,
                           razorpay_order_id: str, razorpay_payment_id: str, razorpay_signature: str) -> list[dict]:
     """Shared payment-check + re-parse used by every paid export format.
     Same already-verified payment triple can be reused across formats —
     HMAC verification doesn't care how many times it's checked, so a
     buyer can download Excel, then Tally XML, then the CSV, from one
-    ₹19 purchase without paying again."""
+    ₹49 purchase without paying again."""
     if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many analyses from this device right now — please wait a few minutes and try again.")
     if not EXPORTS_FREE:
@@ -383,6 +405,51 @@ async def export_accounting_csv_report(request: Request, files: list[UploadFile]
         io.BytesIO(csv_bytes),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=SpendStory_Accounting_Import.csv"},
+    )
+
+
+@app.post("/api/export-bundle")
+async def export_bundle(request: Request, files: list[UploadFile] = File(...),
+                         formats: str = Form(default="excel"),
+                         password: str = Form(default=""), masked: bool = Form(default=False),
+                         razorpay_order_id: str = Form(default=""), razorpay_payment_id: str = Form(default=""),
+                         razorpay_signature: str = Form(default="")):
+    """Every requested format from ONE parse, in ONE response.
+
+    The per-format endpoints above still exist and still work, but asking
+    for three of them meant uploading and re-parsing the same PDF three
+    times (slow), and firing three programmatic downloads in a row — which
+    browsers throttle or block outright, so users silently got only some of
+    their files. One zip sidesteps both. A single requested format is
+    returned as the bare file, not a pointless one-entry zip."""
+    wanted = [f for f in (formats or "").split(",") if f.strip()]
+    seen: set[str] = set()
+    wanted = [f for f in (w.strip() for w in wanted) if f in _BUNDLE_BUILDERS and not (f in seen or seen.add(f))]
+    if not wanted:
+        raise HTTPException(422, "Pick at least one format to download.")
+
+    rows = await _verified_rows(request, files, password, razorpay_order_id,
+                                razorpay_payment_id, razorpay_signature)
+
+    built = [(_BUNDLE_BUILDERS[f][0](masked), _BUNDLE_BUILDERS[f][1](rows, masked)) for f in wanted]
+
+    if len(built) == 1:
+        name, data = built[0]
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type=_BUNDLE_MEDIA.get(wanted[0], "application/octet-stream"),
+            headers={"Content-Disposition": f"attachment; filename={name}"},
+        )
+
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in built:
+            z.writestr(name, data)
+    zbuf.seek(0)
+    zip_name = "SpendStory_Reports_Anonymized.zip" if masked else "SpendStory_Reports.zip"
+    return StreamingResponse(
+        zbuf, media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={zip_name}"},
     )
 
 

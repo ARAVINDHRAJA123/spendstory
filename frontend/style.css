@@ -623,6 +623,83 @@ tbody tr { cursor: default; transition: background .12s ease; }
 tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 tr.flag td { background: color-mix(in srgb, var(--neg) 7%, transparent); }
 tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+/* ── Month-over-month card ── */
+.mom-head h2 { margin-bottom: 2px; }
+.mom-head .muted { font-size: 13px; margin-bottom: 14px; }
+.mom-hero {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.mom-metric {
+  background: var(--bg); border: 1.5px solid var(--line); border-radius: 14px;
+  padding: 13px 15px;
+}
+.mom-metric small { display: block; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.mom-metric b { display: block; font-size: clamp(20px, 3.4vw, 25px); letter-spacing: -.02em; margin: 3px 0 5px; }
+.delta { font-size: 12.5px; font-weight: 700; display: inline-block; }
+.delta.is-good { color: var(--pos); }
+.delta.is-bad { color: var(--neg); }
+.delta.is-flat { color: var(--muted); }
+.mom-sub-head { font-size: 14px; margin-bottom: 10px; color: var(--muted); }
+.mom-cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mom-cats li {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 10px 13px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px;
+}
+.mom-cat-name { font-weight: 700; font-size: 14.5px; }
+.mom-cats small { font-size: 12.5px; }
+.mom-cat-delta { font-size: 13px; font-weight: 700; white-space: nowrap; text-align: right; }
+.mom-cat-delta.is-up { color: var(--neg); }
+.mom-cat-delta.is-down { color: var(--pos); }
+
+/* ── Subscription total ── */
+.sub-total {
+  background: color-mix(in srgb, var(--pos) 10%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--pos) 35%, transparent);
+  border-radius: 14px; padding: 14px 16px; margin: 12px 0 14px;
+}
+.sub-total-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.sub-total-main b {
+  font-size: clamp(26px, 5vw, 34px); letter-spacing: -.03em; color: var(--pos);
+  display: inline-block; margin-top: 2px;
+}
+.sub-total-unit { font-size: 14px; font-weight: 700; color: var(--pos); margin-left: 5px; }
+.sub-total-meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+/* ── Category correction ── */
+.txn-hint { font-size: 13px; margin-bottom: 8px; }
+.cat-override-note {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 12.5px; font-weight: 600; color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  border-radius: 10px; padding: 8px 12px; margin-bottom: 10px;
+}
+.cat-chip-btn { font-family: inherit; border: 1.5px solid transparent; cursor: pointer; transition: box-shadow .15s ease, background .15s ease; }
+.cat-chip-btn:hover { background: color-mix(in srgb, var(--brand) 22%, transparent); }
+.cat-chip-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 35%, transparent); }
+/* An edited category is marked so a corrected row is distinguishable from
+   one the classifier got right on its own. */
+.cat-chip-btn.is-overridden { border-color: currentColor; }
+.cat-chip-btn.is-overridden::after { content: " ✎"; font-size: 10px; opacity: .75; }
+.cat-menu {
+  position: absolute; z-index: 70; width: 210px; max-width: calc(100vw - 16px);
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 14px 38px rgba(0,0,0,.2); padding: 6px;
+  animation: pop-in .15s ease both;
+}
+.cat-menu-head {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); padding: 6px 10px 8px; border-bottom: 1px solid var(--line); margin-bottom: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-menu-item {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 14px;
+  background: none; border: 0; border-radius: 9px; padding: 8px 10px; cursor: pointer; color: var(--ink);
+}
+.cat-menu-item:hover, .cat-menu-item:focus-visible { background: color-mix(in srgb, var(--brand) 12%, transparent); outline: none; }
+.cat-menu-item.is-current { color: var(--brand); font-weight: 700; }
+.cat-menu-item.is-current::after { content: " ✓"; }
+
 .cat-chip { font-size: 12.5px; font-weight: 600; background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 
 .muted { color: var(--muted); font-size: 15px; margin-bottom: 8px; }

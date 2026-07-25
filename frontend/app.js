@@ -191,7 +191,7 @@ const FORMATS = {
 const selectedFormats = () =>
   [...document.querySelectorAll(".fmt-check")].filter((c) => c.checked).map((c) => c.value);
 
-async function downloadFormat(payment, endpoint, filename) {
+async function downloadFormat(payment, endpoint, filename, extra = {}) {
   const masked = $("mask-toggle").checked;
   const form = new FormData();
   for (const f of pendingFiles) form.append("files", f);
@@ -200,6 +200,7 @@ async function downloadFormat(payment, endpoint, filename) {
   form.append("razorpay_order_id", payment.razorpay_order_id);
   form.append("razorpay_payment_id", payment.razorpay_payment_id);
   form.append("razorpay_signature", payment.razorpay_signature);
+  for (const [k, v] of Object.entries(extra)) form.append(k, v);
   const res = await fetch(endpoint, { method: "POST", body: form });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -213,37 +214,29 @@ async function downloadFormat(payment, endpoint, filename) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Deferred: revoking synchronously can cancel the download before the
+  // browser has actually read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 20000);
 }
 
-/* Downloads every picked format off a single verified payment. Failures are
-   collected rather than thrown on the first one: having paid, a user should
-   still get the three files that did work, and be told precisely which
-   didn't — not lose all of them to one bad response. */
+/* One request, one file. Asking the per-format endpoints for three formats
+   meant re-uploading and re-parsing the same PDF three times (slow), then
+   firing three downloads back-to-back — which browsers throttle, so some
+   files silently never arrived. The server now bundles multiple formats
+   into a single zip off one parse. */
 async function downloadSelected(payment, keys) {
   const masked = $("mask-toggle").checked;
-  const failed = [];
-  for (const key of keys) {
-    const fmt = FORMATS[key];
-    if (!fmt) continue;
-    try {
-      await downloadFormat(payment, fmt.endpoint, fmt.filename(masked));
-    } catch (e) {
-      failed.push(key);
-    }
-  }
-  if (failed.length === keys.length) {
-    throw new Error("Payment went through but the files couldn't be generated. You have not lost your purchase — reopen this and try again.");
-  }
-  if (failed.length) {
-    setDlError(`Downloaded, except: ${failed.join(", ")}. Your purchase still stands — try those again.`);
-  }
+  const zipped = keys.length > 1;
+  const name = zipped
+    ? (masked ? "SpendStory_Reports_Anonymized.zip" : "SpendStory_Reports.zip")
+    : FORMATS[keys[0]].filename(masked);
+  await downloadFormat(payment, "api/export-bundle", name, { formats: keys.join(",") });
 }
 
 async function runDownload(payment, keys) {
   const btn = $("btn-dl-confirm");
   btn.disabled = true;
-  btn.textContent = "Generating your files…";
+  btn.textContent = "Preparing your files…";
   try {
     await downloadSelected(payment, keys);
     lastVerifiedPayment = payment;
@@ -419,7 +412,9 @@ function countUp(el, target, formatter) {
 const PALETTE = ["#8b5cf6", "#d946ef", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16", "#71717a", "#f97316"];
 
 function render(d) {
+  applyCatOverrides(d);
   lastRenderedData = d;
+  renderOverrideNote();
 
   $("bank-badge").textContent = d.bank === "UNKNOWN" ? "Bank statement" : d.bank + " statement";
 
@@ -438,8 +433,11 @@ function render(d) {
     <li><div class="m-left"><div class="m-name">${esc(a.merchant)}</div><small class="muted">${fmtDate(a.date)}</small></div>
     <span class="amount neg">−${INR.format(a.debit)}</span></li>`).join("");
 
+  renderMoM(d);
+
   // Recurring subscriptions
   $("subscription-card").hidden = d.subscriptions.length === 0;
+  renderSubTotal(d.subscriptions);
   $("subscription-list").innerHTML = d.subscriptions.slice(0, 6).map((s) => `
     <li><div class="m-left"><div class="m-name">${esc(s.merchant)}</div>
     <small class="muted">every ~${s.avg_interval_days}d · next ~${fmtDate(s.next_expected)} · ${INR.format(s.annual_cost)}/yr</small></div>
@@ -624,9 +622,240 @@ function renderTable(rows) {
     <tr class="${t.is_anomaly ? "flag" : ""}">
       <td>${fmtDateShort(t.date)}</td>
       <td title="${esc(t.narration)}">${esc(t.merchant)}</td>
-      <td><span class="cat-chip">${esc(t.category)}</span></td>
+      <td><button type="button" class="cat-chip cat-chip-btn${CAT_OVERRIDES[catKey(t)] ? " is-overridden" : ""}" data-merchant="${esc(t.merchant)}" data-cat="${esc(t.category)}" title="Tap to change this category">${esc(t.category)}</button></td>
       <td class="num ${t.credit > 0 ? "pos" : "neg"}">${t.credit > 0 ? "+" + INR.format(t.credit) : "−" + INR.format(t.debit)}</td>
     </tr>`).join("");
+}
+
+/* ── Category correction ──────────────────────────────────────
+   The classifier is a keyword match, so a merchant it doesn't know lands in
+   a generic bucket. Rather than pretend that's always right, let people fix
+   it — keyed by merchant so one correction applies to every transaction
+   from that merchant, past and future. Stored on this device only, like
+   history: it's a personal preference about your own statement, not
+   something we need on a server.
+
+   Only the category-derived views are recomputed. Totals, monthly figures,
+   merchants and anomalies don't depend on category at all, so recomputing
+   them would be work that couldn't change any number on screen. */
+const CAT_KEY = "ss-cat-overrides";
+const CATEGORIES = [
+  "Food & Dining", "Shopping", "Transport", "Bills & Utilities", "Entertainment",
+  "Health", "Insurance", "Finance & EMI", "Salary / Income", "Other Income", "Other Expense",
+];
+
+function loadCatOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CAT_KEY) || "{}");
+    // Anything could be sitting in localStorage — a hand-edited value, or a
+    // shape from an older build. Keep only string->string pairs.
+    const clean = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw)) if (typeof v === "string") clean[k] = v;
+    }
+    return clean;
+  } catch { return {}; }
+}
+let CAT_OVERRIDES = loadCatOverrides();
+
+const catKey = (t) => (t.merchant || "").trim().toLowerCase();
+
+/* Applies saved corrections to a freshly-fetched bundle and rebuilds the
+   category totals from the corrected rows. Mutates in place: `d` is this
+   render's own copy, and lastRenderedData must see the same objects the
+   table and charts were built from. */
+function applyCatOverrides(d) {
+  if (!d || !d.transactions) return d;
+  for (const t of d.transactions) {
+    if (t._origCategory === undefined) t._origCategory = t.category;
+    const o = CAT_OVERRIDES[catKey(t)];
+    t.category = o || t._origCategory;
+  }
+  const totals = new Map();
+  for (const t of d.transactions) {
+    const amt = t.debit ? t.debit : t.credit;
+    const e = totals.get(t.category) || { category: t.category, spend: 0, txn_count: 0 };
+    e.spend += amt; e.txn_count += 1;
+    totals.set(t.category, e);
+  }
+  d.categories = [...totals.values()].sort((a, b) => b.spend - a.spend);
+  return d;
+}
+
+function renderOverrideNote() {
+  const n = Object.keys(CAT_OVERRIDES).length;
+  $("cat-override-note").hidden = n === 0;
+  $("cat-override-count").textContent =
+    `${n} merchant${n === 1 ? "" : "s"} recategorised on this device.`;
+}
+
+function saveCatOverride(merchant, category) {
+  const key = (merchant || "").trim().toLowerCase();
+  if (!key) return;
+  const original = (lastRenderedData?.transactions || []).find((t) => catKey(t) === key)?._origCategory;
+  // Choosing the original category back is a removal, not an override —
+  // otherwise "reset all" would leave behind entries that change nothing.
+  if (category === original) delete CAT_OVERRIDES[key];
+  else CAT_OVERRIDES[key] = category;
+  try { localStorage.setItem(CAT_KEY, JSON.stringify(CAT_OVERRIDES)); } catch {}
+  renderOverrideNote();
+  if (lastRenderedData) {
+    applyCatOverrides(lastRenderedData);
+    buildCharts(lastRenderedData);
+    applyTxnFilters();
+  }
+}
+
+$("btn-reset-cats").addEventListener("click", () => {
+  CAT_OVERRIDES = {};
+  try { localStorage.removeItem(CAT_KEY); } catch {}
+  renderOverrideNote();
+  if (lastRenderedData) {
+    applyCatOverrides(lastRenderedData);
+    buildCharts(lastRenderedData);
+    applyTxnFilters();
+  }
+});
+
+const catMenu = $("cat-menu");
+let catMenuFor = null;
+
+function closeCatMenu() { catMenu.hidden = true; catMenuFor = null; }
+
+function openCatMenu(btn) {
+  const merchant = btn.dataset.merchant;
+  const current = btn.dataset.cat;
+  catMenuFor = merchant;
+  catMenu.innerHTML = `<div class="cat-menu-head">${esc(merchant || "this merchant")}</div>` +
+    CATEGORIES.map((c) => `<button type="button" role="menuitem" class="cat-menu-item${c === current ? " is-current" : ""}" data-value="${esc(c)}">${esc(c)}</button>`).join("");
+  catMenu.hidden = false;
+  // Positioned after unhiding so the measured height is the real one, then
+  // clamped into the viewport — near the bottom of a long table the menu
+  // would otherwise open below the fold.
+  const r = btn.getBoundingClientRect();
+  const mh = catMenu.offsetHeight, mw = catMenu.offsetWidth;
+  const top = r.bottom + 6 + mh > window.innerHeight - 8 ? Math.max(8, r.top - mh - 6) : r.bottom + 6;
+  const left = Math.min(Math.max(8, r.left), window.innerWidth - mw - 8);
+  catMenu.style.top = `${top + window.scrollY}px`;
+  catMenu.style.left = `${left + window.scrollX}px`;
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cat-chip-btn");
+  if (btn) {
+    e.stopPropagation();
+    if (catMenuFor === btn.dataset.merchant && !catMenu.hidden) return closeCatMenu();
+    return openCatMenu(btn);
+  }
+  const item = e.target.closest(".cat-menu-item");
+  if (item) {
+    e.stopPropagation();
+    const m = catMenuFor;
+    closeCatMenu();
+    return saveCatOverride(m, item.dataset.value);
+  }
+  if (!catMenu.hidden) closeCatMenu();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCatMenu(); });
+// Anchored to a row's on-screen position, so it must follow or close.
+window.addEventListener("scroll", () => { if (!catMenu.hidden) closeCatMenu(); }, { passive: true });
+window.addEventListener("resize", () => { if (!catMenu.hidden) closeCatMenu(); });
+
+/* ── Subscription cancellation value ──────────────────────────
+   The per-item annual costs were already computed server-side; what was
+   missing is the number people actually react to — the total. */
+function renderSubTotal(subs) {
+  const yearly = subs.reduce((sum, s) => sum + (s.annual_cost || 0), 0);
+  $("sub-total-year").textContent = INR.format(yearly);
+  $("sub-total-month").textContent = INR.format(yearly / 12);
+  $("sub-total-count").textContent = `${subs.length} subscription${subs.length === 1 ? "" : "s"}`;
+}
+
+/* ── Month-over-month comparison ──────────────────────────────
+   Compares the two most recent months present in the statement. Needs two
+   full months to say anything honest, so with one month the card stays
+   hidden rather than showing a comparison against nothing. */
+function renderMoM(d) {
+  const card = $("mom-card");
+  // monthly_summary() keys months as "Jan 2026" in first-seen order, which
+  // is not chronological — sort before picking "the last two months".
+  const months = (d.monthly || []).filter((m) => m.month)
+    .slice().sort((a, b) => monthOrd(a.month) - monthOrd(b.month));
+  if (months.length < 2) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const cur = months[months.length - 1], prev = months[months.length - 2];
+  $("mom-title").textContent = `${cur.month} vs ${prev.month}`;
+  $("mom-sub").textContent = months.length > 2
+    ? `The two most recent of ${months.length} months in this statement.`
+    : "The two months in this statement.";
+
+  const curNet = cur.income - cur.expense, prevNet = prev.income - prev.expense;
+  setDelta("mom-spend", "mom-spend-delta", cur.expense, prev.expense, true);
+  setDelta("mom-income", "mom-income-delta", cur.income, prev.income, false);
+  setDelta("mom-net", "mom-net-delta", curNet, prevNet, false);
+
+  // Per-category movement, computed from the transactions rather than asking
+  // the server for it — the numbers must reflect any category corrections
+  // the user has made, and those only exist in this browser.
+  const byCat = new Map();
+  for (const t of d.transactions) {
+    if (!t.debit) continue;
+    const m = monthLabel(t.date);
+    if (m !== cur.month && m !== prev.month) continue;
+    const e = byCat.get(t.category) || { category: t.category, cur: 0, prev: 0 };
+    if (m === cur.month) e.cur += t.debit; else e.prev += t.debit;
+    byCat.set(t.category, e);
+  }
+  const moved = [...byCat.values()]
+    .map((e) => ({ ...e, diff: e.cur - e.prev }))
+    .filter((e) => Math.abs(e.diff) >= 1)
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+    .slice(0, 5);
+
+  $("mom-empty").hidden = moved.length > 0;
+  $("mom-cats").innerHTML = moved.map((e) => {
+    const up = e.diff > 0;
+    // A category with no spend last month has no meaningful % change —
+    // "+∞%" is noise, so it's labelled as new instead.
+    const pct = e.prev > 0 ? Math.round(Math.abs(e.diff) / e.prev * 100) : null;
+    return `<li>
+      <div class="mom-cat-left">
+        <div class="mom-cat-name">${esc(e.category)}</div>
+        <small class="muted">${INR.format(e.prev)} → ${INR.format(e.cur)}</small>
+      </div>
+      <span class="mom-cat-delta ${up ? "is-up" : "is-down"}">
+        ${up ? "▲" : "▼"} ${INR.format(Math.abs(e.diff))}${pct === null ? " · new" : ` · ${pct}%`}
+      </span>
+    </li>`;
+  }).join("");
+}
+
+/* "2026-01-04" -> "Jan 2026", matching monthly_summary()'s own key format
+   so transactions can be bucketed against it. */
+const monthLabel = (iso) =>
+  new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" });
+/* Sortable ordinal for a "Jan 2026" label. */
+const monthOrd = (label) => {
+  const d = new Date("1 " + label);
+  return isNaN(d) ? 0 : d.getFullYear() * 12 + d.getMonth();
+};
+
+function setDelta(valueId, deltaId, cur, prev, lowerIsBetter) {
+  $(valueId).textContent = INR.format(cur);
+  const el = $(deltaId);
+  const diff = cur - prev;
+  if (Math.abs(diff) < 1) {
+    el.textContent = "no change";
+    el.className = "delta is-flat";
+    return;
+  }
+  const up = diff > 0;
+  const pct = prev !== 0 ? ` (${Math.round(Math.abs(diff) / Math.abs(prev) * 100)}%)` : "";
+  el.textContent = `${up ? "▲" : "▼"} ${INR.format(Math.abs(diff))}${pct}`;
+  // "Good" depends on the metric: spending more is bad, earning more is good.
+  const good = lowerIsBetter ? !up : up;
+  el.className = `delta ${good ? "is-good" : "is-bad"}`;
 }
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

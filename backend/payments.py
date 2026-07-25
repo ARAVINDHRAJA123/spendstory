@@ -24,9 +24,8 @@ from uuid import uuid4
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 
-# ₹19 one-time, per the owner's pricing decision (not the ₹49 originally
-# floated) — see memory/spendstory_excel_paywall_pricing.
-PRICE_PAISE = 1900
+# ₹49 one-time.
+PRICE_PAISE = 4900
 CURRENCY = "INR"
 
 
