@@ -67,6 +67,13 @@
       </button>
       <span id="privacy-tip" class="privacy-tip" role="tooltip">🔒 Your statement is analysed and immediately discarded — nothing is stored</span>
     </div>
+    <button id="btn-about" class="btn-privacy btn-about" type="button" aria-haspopup="dialog" aria-controls="about-modal" aria-label="About SpendStory">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M12 11v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="12" cy="7.6" r="1.15" fill="currentColor"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -148,16 +155,8 @@
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
 
   <div class="card export-panel">
-    <label class="mask-toggle">
-      <input type="checkbox" id="mask-toggle">
-      🔒 Anonymize account IDs &amp; UPI handles — for sharing with a CA/advisor
-    </label>
-    <button id="btn-export" class="btn-export" type="button">⬇ Download report — ₹19</button>
+    <button id="btn-export" class="btn-export btn-export-green" type="button">⬇ Download report — ₹19</button>
     <p class="export-formats-hint">Excel · Tally XML · QuickBooks/Zoho CSV — one purchase, every format</p>
-    <p id="other-formats" class="other-formats" hidden>
-      Also download: <button id="btn-export-tally" class="btn-mini" type="button">Tally XML</button>
-      <button id="btn-export-csv" class="btn-mini" type="button">QuickBooks/Zoho CSV</button>
-    </p>
     <p id="export-error" class="error" role="alert" hidden></p>
   </div>
 
@@ -214,6 +213,109 @@
 
   <footer class="foot">SpendStory · your statement was analysed in memory and has already been deleted.</footer>
 </main>
+
+<!-- ── Download picker modal ──────────────────────────────────
+     Opened by the export button. One purchase unlocks every format, so
+     the choice here is only about which files to actually save — and the
+     anonymize option lives with them, since it changes what's inside
+     every file rather than being a separate decision. -->
+<div id="dl-backdrop" class="modal-backdrop" hidden></div>
+<div id="dl-modal" class="app-modal" role="dialog" aria-modal="true" aria-labelledby="dl-title" hidden>
+  <div class="app-modal-head">
+    <h2 id="dl-title">Choose what to download</h2>
+    <button id="btn-dl-close" class="modal-close" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="app-modal-body">
+    <p class="modal-lede">One purchase unlocks every format. Pick what you need now — you can reopen this and grab the rest without paying again.</p>
+    <ul class="fmt-list">
+      <li><label class="fmt-item">
+        <input type="checkbox" class="fmt-check" value="excel" checked>
+        <span class="fmt-ico">📊</span>
+        <span class="fmt-text"><b>Excel deep-dive report</b><small>Every transaction categorised, plus month-by-month and category breakdowns.</small></span>
+        <span class="fmt-tick" aria-hidden="true"></span>
+      </label></li>
+      <li><label class="fmt-item">
+        <input type="checkbox" class="fmt-check" value="tally">
+        <span class="fmt-ico">🧾</span>
+        <span class="fmt-text"><b>Tally XML</b><small>Import straight into Tally as vouchers — no retyping.</small></span>
+        <span class="fmt-tick" aria-hidden="true"></span>
+      </label></li>
+      <li><label class="fmt-item">
+        <input type="checkbox" class="fmt-check" value="csv">
+        <span class="fmt-ico">📁</span>
+        <span class="fmt-text"><b>QuickBooks / Zoho CSV</b><small>The standard accounting-import layout both tools accept.</small></span>
+        <span class="fmt-tick" aria-hidden="true"></span>
+      </label></li>
+    </ul>
+
+    <label class="switch-row">
+      <span class="switch-text">
+        <b>🔒 Anonymize account IDs &amp; UPI handles</b>
+        <small>Masks account numbers and UPI IDs in every file — safe to hand to a CA or advisor.</small>
+      </span>
+      <span class="switch"><input type="checkbox" id="mask-toggle"><span class="switch-track"></span></span>
+    </label>
+
+    <p id="dl-error" class="error" role="alert" hidden></p>
+  </div>
+  <div class="app-modal-foot">
+    <button id="btn-dl-confirm" class="btn-export btn-export-green" type="button">⬇ Download — ₹19</button>
+    <p class="modal-foot-note">Paid once per statement · secure Razorpay checkout · we never see your card details</p>
+  </div>
+</div>
+
+<!-- ── About modal ── -->
+<div id="about-backdrop" class="modal-backdrop" hidden></div>
+<div id="about-modal" class="app-modal" role="dialog" aria-modal="true" aria-labelledby="about-title" hidden>
+  <div class="app-modal-head">
+    <h2 id="about-title">What is SpendStory?</h2>
+    <button id="btn-about-close" class="modal-close" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="app-modal-body">
+    <section class="about-section">
+      <h3>In plain English</h3>
+      <p>A bank statement is a wall of cryptic text — <code>UPI-SWIGGY-swiggy@ybl</code> tells you almost nothing at a glance. SpendStory reads that wall for you and turns it into a picture: how much went out, how much came in, what you spent it on, and which charges look unusual.</p>
+      <p>You upload your statement PDF, wait a few seconds, and get a dashboard. No account to create, no forms to fill in, nothing to install.</p>
+    </section>
+    <section class="about-section">
+      <h3>Step by step</h3>
+      <ol>
+        <li><b>Upload.</b> Drop in your statement PDF. Locked with a password? You'll be asked for it — it's used to open the file and then discarded.</li>
+        <li><b>We read it.</b> Your bank is auto-detected, and every transaction is pulled out with its date, description and amount.</li>
+        <li><b>We sort it.</b> Each transaction is matched to a category — food, transport, bills, shopping and so on — from the merchant name in the description.</li>
+        <li><b>You explore.</b> Charts, top merchants, recurring subscriptions, and unusually large payments. Tap any category to filter, or search for a specific merchant.</li>
+        <li><b>Optionally, you export.</b> A paid one-off download gives you the same data as an Excel report, a Tally XML import, or an accounting CSV.</li>
+      </ol>
+    </section>
+    <section class="about-section">
+      <h3>What happens to your data</h3>
+      <ul>
+        <li>Your PDF is processed <b>in memory</b> and never written to disk on our side.</li>
+        <li>Nothing about your statement is stored on our servers after the response is sent — there is no database of your transactions.</li>
+        <li>"Past analyses" lives in <b>your browser's own storage, on this device only</b>. It keeps a small summary, never the original PDF. Clear it any time from that panel — worth doing on a shared computer.</li>
+        <li>Payments go through Razorpay's own hosted checkout. Your card or UPI details are entered on their page, not ours, and we never receive them.</li>
+      </ul>
+    </section>
+    <section class="about-section">
+      <h3>For the technically minded</h3>
+      <ul>
+        <li>Text is extracted from the PDF and parsed with per-bank layout rules — currently HDFC, SBI, Axis, PNB, Indian Overseas and City Union, auto-detected from the document itself.</li>
+        <li>Categorisation is a deterministic keyword match against a merchant dictionary, not a language model. The same statement always produces the same categories, and nothing is sent to any AI provider.</li>
+        <li>"Unusually large" is a statistical outlier check against your own spending distribution, not a fixed rupee threshold — so it adapts to how much you normally spend.</li>
+        <li>Recurring subscriptions are detected by finding near-identical amounts to the same merchant at roughly monthly intervals.</li>
+        <li>Drop in several statements at once and they're merged into a single timeline, deduplicated where the date ranges overlap.</li>
+      </ul>
+    </section>
+    <section class="about-section">
+      <h3>Where it can be wrong</h3>
+      <ul>
+        <li>A statement from an unsupported bank, or an unusual layout from a supported one, may extract partially or not at all. Nothing is silently guessed — you'll see it in the numbers.</li>
+        <li>A merchant that isn't in the keyword dictionary lands in a general category rather than being invented into a specific one.</li>
+        <li>Scanned or image-only PDFs have no extractable text and won't work; you need the digital statement your bank issues.</li>
+      </ul>
+    </section>
+  </div>
+</div>
 
 <script src="vendor/chart.umd.min.js"></script>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>

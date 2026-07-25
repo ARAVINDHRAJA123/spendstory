@@ -110,22 +110,41 @@ body {
 
 /* Supported-banks info moved out of the dropzone (was cluttering it) into
    a small popover — same interaction pattern as the history drawer. */
-.banks-dropdown { display: inline-flex; }
+/* position: relative so each popover anchors under its OWN button. Without
+   it they resolve against .topbar-right and every dropdown opens stacked in
+   the same spot at the far right, regardless of which button was clicked. */
+.banks-dropdown { display: inline-flex; position: relative; }
 .banks-toggle {
   font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted);
-  background: var(--card); border: 1px solid var(--line); border-radius: 999px;
-  padding: 6px 12px; cursor: pointer; white-space: nowrap;
-  transition: color .15s ease, border-color .15s ease;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 999px;
+  padding: 7px 14px; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center;
+  /* not border-color: it reads from var(--line), and a transitioned custom
+     property freezes at its first computed value — it would keep the dark
+     theme's border after switching to light. */
+  transition: color .15s ease, background .15s ease, box-shadow .15s ease;
 }
-.banks-toggle:hover, .banks-toggle[aria-expanded="true"] { color: var(--brand); border-color: var(--brand); }
-.banks-toggle .caret { display: inline-block; margin-left: 6px; font-size: 16px; transition: transform .2s ease; }
+.banks-toggle:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, var(--card)); }
+.banks-toggle[aria-expanded="true"] {
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
+}
+.banks-toggle .caret { display: inline-block; margin-left: 7px; font-size: 15px; transition: transform .22s var(--spring, ease); }
 .banks-toggle[aria-expanded="true"] .caret { transform: rotate(180deg); }
 .banks-popover {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
-  width: 220px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--line);
-  border-radius: 14px; box-shadow: var(--shadow); padding: 12px;
-  animation: rise .18s ease both;
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 20;
+  width: 248px; max-width: calc(100vw - 32px); background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: 0 12px 34px rgba(0,0,0,.14), var(--shadow); padding: 12px;
+  animation: pop-in .18s ease both;
 }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
+/* Anchor side is decided at open time in app.js (see wireDropdown): once the
+   topbar wraps, these buttons move to the left edge and a right-anchored
+   popover hangs off-screen, but a left-anchored one overflows the right for
+   the second button. Only measuring can tell which side actually fits. */
+.banks-popover.align-left { right: auto; left: 0; }
 .banks-popover-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; }
 .banks-popover ul { list-style: none; margin: 0; padding: 0; }
 .banks-popover li { font-size: 14px; padding: 5px 0; color: var(--ink); text-align: left; }
@@ -214,21 +233,124 @@ body {
   border-radius: 12px; padding: 10px 16px;
 }
 
-.mask-toggle {
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
-  font-size: 13.5px; font-weight: 600; color: var(--muted);
-  margin: 0 0 14px; width: fit-content;
-}
-.mask-toggle input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
-.mask-toggle:hover { color: var(--ink); }
-
-/* ── Export panel: config (anonymize) -> action (buy) -> extras (other
-   formats), grouped in one card instead of scattered across the results
-   header, so it reads as a single coherent decision instead of clutter. */
+/* ── Export panel. The format picking and the anonymize option moved into
+   the download modal — leaving one button here keeps the results page a
+   dashboard rather than a settings form. */
 .export-panel { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.export-panel .mask-toggle { margin: 0; }
 .export-formats-hint { font-size: 12.5px; color: var(--muted); margin: -2px 0 0; }
-.export-panel .error, .export-panel .other-formats { margin: 0; }
+.export-panel .error { margin: 0; }
+
+/* ── Modal shell (download picker + about) ── */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60; background: rgba(10, 10, 14, .5);
+  backdrop-filter: blur(3px);
+  opacity: 0; transition: opacity .22s ease;
+}
+.modal-backdrop.show { opacity: 1; }
+.app-modal {
+  position: fixed; z-index: 61; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(.96); opacity: 0;
+  width: min(560px, calc(100vw - 28px)); max-height: min(84vh, 780px);
+  display: flex; flex-direction: column;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .3);
+  transition: opacity .22s ease, transform .22s ease;
+}
+.app-modal.open { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.app-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 20px 12px; border-bottom: 1px solid var(--line); flex: none;
+}
+.app-modal-head h2 { margin: 0; font-size: 19px; }
+.modal-close {
+  font: inherit; font-size: 15px; line-height: 1; color: var(--muted);
+  background: none; border: 0; cursor: pointer; padding: 8px; border-radius: 10px;
+  transition: color .15s ease, background .15s ease;
+}
+.modal-close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.app-modal-body { padding: 16px 20px; overflow-y: auto; flex: 1 1 auto; }
+.app-modal-foot {
+  padding: 14px 20px 18px; border-top: 1px solid var(--line); flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.modal-lede { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.modal-foot-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ── Format picker ── */
+.fmt-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 9px; }
+.fmt-item {
+  position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 14px;
+  cursor: pointer; background: var(--bg);
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.fmt-item:hover { background: color-mix(in srgb, var(--ink) 4%, var(--bg)); }
+.fmt-check { position: absolute; opacity: 0; pointer-events: none; }
+.fmt-ico { font-size: 22px; line-height: 1; }
+.fmt-text b { display: block; font-size: 14.5px; }
+.fmt-text small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 2px; }
+.fmt-tick {
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  border: 1.5px solid var(--line); display: grid; place-items: center;
+  transition: background .15s ease, border-color .15s ease;
+}
+.fmt-tick::after {
+  content: ""; width: 10px; height: 6px; margin-top: -2px;
+  border-left: 2.5px solid #fff; border-bottom: 2.5px solid #fff;
+  transform: rotate(-45deg) scale(.5); opacity: 0;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.fmt-check:checked ~ .fmt-tick { background: var(--pos); border-color: var(--pos); }
+.fmt-check:checked ~ .fmt-tick::after { opacity: 1; transform: rotate(-45deg) scale(1); }
+.fmt-check:checked ~ .fmt-text b { color: var(--pos); }
+/* :has lets the whole row react, but the tick above already carries the
+   state on its own — so browsers without :has still show a correct UI. */
+.fmt-item:has(.fmt-check:checked) {
+  border-color: var(--pos);
+  background: color-mix(in srgb, var(--pos) 8%, var(--bg));
+}
+.fmt-check:focus-visible ~ .fmt-tick { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pos) 35%, transparent); }
+
+/* ── Anonymize switch ── */
+.switch-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 14px;
+  cursor: pointer; background: var(--bg);
+  transition: background .15s ease;
+}
+.switch-row:hover { background: color-mix(in srgb, var(--ink) 4%, var(--bg)); }
+.switch-text b { display: block; font-size: 14px; }
+.switch-text small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 3px; }
+.switch { position: relative; flex: none; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch-track {
+  display: block; width: 46px; height: 27px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  transition: background .2s ease;
+}
+.switch-track::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 21px; height: 21px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  transition: transform .2s ease;
+}
+.switch input:checked + .switch-track { background: var(--pos); }
+.switch input:checked + .switch-track::after { transform: translateX(19px); }
+.switch input:focus-visible + .switch-track { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pos) 35%, transparent); }
+
+/* ── About modal body ── */
+.about-section { margin-bottom: 22px; }
+.about-section:last-child { margin-bottom: 0; }
+.about-section h3 { margin: 0 0 8px; font-size: 15px; color: var(--brand); }
+.about-section p { margin: 0 0 9px; font-size: 14.5px; line-height: 1.6; color: var(--muted); }
+.about-section ul, .about-section ol { margin: 0; padding-left: 20px; }
+.about-section li { font-size: 14.5px; line-height: 1.6; color: var(--muted); margin-bottom: 7px; }
+.about-section b { color: var(--ink); }
+.about-section code {
+  font-size: 13px; padding: 1px 5px; border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
 
 /* ── Password ── */
 .password-row { max-width: 560px; margin: 18px auto 0; background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); animation: rise .35s ease both; }
@@ -277,6 +399,28 @@ body {
   .btn-export { animation: none; }
 }
 
+/* Green variant for the actual buy action. color is forced because
+   .btn-export's own `color: var(--brand-ink)` is equally specific and
+   resolves to white in light theme but would otherwise be theme-dependent —
+   on this gradient it must stay white in both. */
+.btn-export-green {
+  color: #fff !important;
+  background: linear-gradient(135deg, #10b981, #22c55e 55%, #4ade80);
+  box-shadow: 0 4px 18px color-mix(in srgb, #10b981 45%, transparent);
+  animation: export-pulse-green 2.6s ease-in-out infinite;
+}
+.btn-export-green:hover {
+  box-shadow: 0 6px 22px color-mix(in srgb, #10b981 58%, transparent);
+  animation-play-state: paused;
+}
+@keyframes export-pulse-green {
+  0%, 100% { box-shadow: 0 4px 18px color-mix(in srgb, #10b981 45%, transparent); }
+  50%      { box-shadow: 0 4px 26px color-mix(in srgb, #10b981 70%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-export-green { animation: none; }
+}
+
 .error {
   max-width: 560px; margin: 16px auto; text-align: center;
   color: var(--neg); font-weight: 600;
@@ -284,7 +428,6 @@ body {
   border-radius: 12px; padding: 12px 16px;
   animation: shake .4s ease;
 }
-.other-formats { font-size: 13.5px; color: var(--muted); margin: -6px 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── Trust strip ── */
 .trust { display: flex; justify-content: center; gap: clamp(14px, 3vw, 36px); flex-wrap: wrap; margin-top: 18px; animation: rise .6s .24s ease both; }
@@ -350,10 +493,17 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   flex-wrap: wrap; gap: 10px 14px; padding: 6px 0 14px;
 }
+/* Fixed blue rather than var(--brand): this badge names which bank the
+   statement came from, which is a statement of fact, not a brand accent —
+   keeping it off the purple stops it competing with the export button. */
 .bank-badge {
   font-weight: 700; font-size: 14px; letter-spacing: .04em; white-space: nowrap;
-  background: color-mix(in srgb, var(--brand) 14%, transparent);
-  color: var(--brand); padding: 6px 14px; border-radius: 999px;
+  background: color-mix(in srgb, #2980F2 14%, transparent);
+  color: #2980F2; padding: 6px 14px; border-radius: 999px;
+}
+:root[data-theme="dark"] .bank-badge { color: #6FB0FF; background: color-mix(in srgb, #2980F2 22%, transparent); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bank-badge { color: #6FB0FF; background: color-mix(in srgb, #2980F2 22%, transparent); }
 }
 .btn-ghost, .btn-export { white-space: nowrap; }
 /* Narrow screens: three items no longer fit on one line — let the badge

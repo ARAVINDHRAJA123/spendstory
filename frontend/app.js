@@ -60,6 +60,12 @@ $("btn-again").addEventListener("click", () => {
   $("btn-export").disabled = false;
   $("btn-export").title = "";
   $("mask-toggle").checked = false;
+  // A new statement is a new purchase — carrying the old payment over would
+  // hand out a second statement's report on one payment.
+  lastVerifiedPayment = null;
+  $("btn-dl-confirm").textContent = DL_BTN_DEFAULT;
+  document.querySelectorAll(".fmt-check").forEach((c, i) => (c.checked = i === 0));
+  setDlError("");
   $("password-row").hidden = true;
   $("trust-strip").hidden = false;
   $("pdf-password").value = "";
@@ -156,14 +162,34 @@ async function analyseMulti(files, password) {
    server-side before generating anything. If the user closes the Checkout
    popup without paying, nothing happens — no charge, no file. */
 const EXPORT_BTN_DEFAULT = $("btn-export").textContent;
+const DL_BTN_DEFAULT = $("btn-dl-confirm").textContent;
 
 function setExportError(msg) {
   const el = $("export-error");
   el.hidden = !msg;
   el.textContent = msg || "";
 }
+function setDlError(msg) {
+  const el = $("dl-error");
+  el.hidden = !msg;
+  el.textContent = msg || "";
+}
 
 let lastVerifiedPayment = null; // reused for the extra formats below — same paid unlock, no re-charge
+
+/* Which formats the picker offers. endpoint/filename live here so adding a
+   format is one entry, not edits scattered across the download path. */
+const FORMATS = {
+  excel: {
+    endpoint: "api/export-excel",
+    filename: (masked) => (masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx"),
+  },
+  tally: { endpoint: "api/export-tally", filename: () => "SpendStory_Tally_Import.xml" },
+  csv: { endpoint: "api/export-accounting-csv", filename: () => "SpendStory_Accounting_Import.csv" },
+};
+
+const selectedFormats = () =>
+  [...document.querySelectorAll(".fmt-check")].filter((c) => c.checked).map((c) => c.value);
 
 async function downloadFormat(payment, endpoint, filename) {
   const masked = $("mask-toggle").checked;
@@ -190,55 +216,70 @@ async function downloadFormat(payment, endpoint, filename) {
   URL.revokeObjectURL(url);
 }
 
-async function downloadReport(payment) {
-  const btn = $("btn-export");
-  btn.disabled = true;
-  btn.textContent = "Generating your report…";
-  try {
-    const masked = $("mask-toggle").checked;
-    await downloadFormat(payment, "api/export-excel", masked ? "SpendStory_Report_Anonymized.xlsx" : "SpendStory_Report.xlsx");
-    lastVerifiedPayment = payment;
-    $("other-formats").hidden = false;
-    const hint = document.querySelector(".export-formats-hint");
-    if (hint) hint.hidden = true;
-  } catch (e) {
-    setExportError(e.message || "Payment succeeded but the report failed to generate — please contact support.");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = EXPORT_BTN_DEFAULT;
+/* Downloads every picked format off a single verified payment. Failures are
+   collected rather than thrown on the first one: having paid, a user should
+   still get the three files that did work, and be told precisely which
+   didn't — not lose all of them to one bad response. */
+async function downloadSelected(payment, keys) {
+  const masked = $("mask-toggle").checked;
+  const failed = [];
+  for (const key of keys) {
+    const fmt = FORMATS[key];
+    if (!fmt) continue;
+    try {
+      await downloadFormat(payment, fmt.endpoint, fmt.filename(masked));
+    } catch (e) {
+      failed.push(key);
+    }
+  }
+  if (failed.length === keys.length) {
+    throw new Error("Payment went through but the files couldn't be generated. You have not lost your purchase — reopen this and try again.");
+  }
+  if (failed.length) {
+    setDlError(`Downloaded, except: ${failed.join(", ")}. Your purchase still stands — try those again.`);
   }
 }
 
-$("btn-export-tally")?.addEventListener("click", async () => {
-  if (!lastVerifiedPayment) return;
-  try { await downloadFormat(lastVerifiedPayment, "api/export-tally", "SpendStory_Tally_Import.xml"); }
-  catch (e) { setExportError(e.message); }
-});
-$("btn-export-csv")?.addEventListener("click", async () => {
-  if (!lastVerifiedPayment) return;
-  try { await downloadFormat(lastVerifiedPayment, "api/export-accounting-csv", "SpendStory_Accounting_Import.csv"); }
-  catch (e) { setExportError(e.message); }
-});
-
-$("btn-export").addEventListener("click", async () => {
-  if (isSampleMode) {
-    return setExportError("This is sample data — upload your own statement to download a real report.");
+async function runDownload(payment, keys) {
+  const btn = $("btn-dl-confirm");
+  btn.disabled = true;
+  btn.textContent = "Generating your files…";
+  try {
+    await downloadSelected(payment, keys);
+    lastVerifiedPayment = payment;
+    // Already paid: the button becomes a plain re-download for any format
+    // they didn't pick the first time, with no second charge.
+    btn.textContent = "⬇ Download";
+  } catch (e) {
+    setDlError(e.message);
+    btn.textContent = DL_BTN_DEFAULT;
+  } finally {
+    btn.disabled = false;
+    if (lastVerifiedPayment) btn.textContent = "⬇ Download";
   }
-  if (!pendingFiles.length) return;
+}
 
-  const btn = $("btn-export");
-  setExportError("");
+$("btn-dl-confirm").addEventListener("click", async () => {
+  const keys = selectedFormats();
+  if (!keys.length) return setDlError("Pick at least one format to download.");
+  setDlError("");
+
+  // Already paid for this statement — no second charge for the formats
+  // they skipped the first time round.
+  if (lastVerifiedPayment) return runDownload(lastVerifiedPayment, keys);
+
+  const btn = $("btn-dl-confirm");
 
   // Temporary QA mode (SPENDSTORY_EXPORTS_FREE=true server-side) — skip
   // Razorpay entirely, backend ignores the empty signature while it's on.
   const statusRes = await fetch("api/exports-status").catch(() => null);
   const status = statusRes && statusRes.ok ? await statusRes.json() : { free: false };
   if (status.free) {
-    return downloadReport({ razorpay_order_id: "", razorpay_payment_id: "", razorpay_signature: "" });
+    return runDownload({ razorpay_order_id: "", razorpay_payment_id: "", razorpay_signature: "" }, keys);
   }
 
   if (typeof Razorpay === "undefined") {
-    return setExportError("Payment widget failed to load — check your connection and try again.");
+    return setDlError("Payment widget failed to load — check your connection and try again.");
   }
   btn.disabled = true;
   btn.textContent = "Starting checkout…";
@@ -257,25 +298,35 @@ $("btn-export").addEventListener("click", async () => {
       currency: order.currency,
       order_id: order.order_id,
       name: "SpendStory",
-      description: "Deep-Dive Excel Report",
+      description: "Deep-Dive Report",
       theme: { color: "#7c3aed" },
-      handler: (response) => downloadReport(response),
+      handler: (response) => runDownload(response, keys),
       modal: {
         ondismiss: () => {
           btn.disabled = false;
-          btn.textContent = EXPORT_BTN_DEFAULT;
+          btn.textContent = DL_BTN_DEFAULT;
         },
       },
     });
-    rzp.on("payment.failed", () => setExportError("Payment failed. You have not been charged — please try again."));
+    rzp.on("payment.failed", () => setDlError("Payment failed. You have not been charged — please try again."));
     rzp.open();
-    btn.textContent = EXPORT_BTN_DEFAULT;
+    btn.textContent = DL_BTN_DEFAULT;
     btn.disabled = false;
   } catch (e) {
-    setExportError(e.message || "Couldn't reach the server. Please try again.");
+    setDlError(e.message || "Couldn't reach the server. Please try again.");
     btn.disabled = false;
-    btn.textContent = EXPORT_BTN_DEFAULT;
+    btn.textContent = DL_BTN_DEFAULT;
   }
+});
+
+$("btn-export").addEventListener("click", () => {
+  if (isSampleMode) {
+    return setExportError("This is sample data — upload your own statement to download a real report.");
+  }
+  if (!pendingFiles.length) return;
+  setExportError("");
+  setDlError("");
+  openModal("dl-modal", "dl-backdrop");
 });
 
 /* ── Sample data demo ─────────────────────────────────────────
@@ -628,6 +679,7 @@ function renderHistory() {
       if (!e) return;
       closeDrawer();
       pendingFiles = []; // history keeps only a summary, never the original PDF
+      lastVerifiedPayment = null; // different statement — don't carry a purchase across
       show("results");
       render(e.data);
       const exportBtn = $("btn-export");
@@ -662,6 +714,15 @@ function wireDropdown(btnId, popoverId) {
   const open = () => {
     if (closeOpenDropdown) closeOpenDropdown();
     pop.hidden = false; btn.setAttribute("aria-expanded", "true"); closeOpenDropdown = close;
+    // Default is right-anchored (correct on desktop, where these buttons sit
+    // at the right edge). Once the topbar wraps they move left and that
+    // overflows off-screen — so measure and flip to left-anchored, unless
+    // that would overflow the other way.
+    pop.classList.remove("align-left");
+    const r = pop.getBoundingClientRect();
+    if (r.left < 8 && btn.getBoundingClientRect().left + r.width <= window.innerWidth - 8) {
+      pop.classList.add("align-left");
+    }
   };
   btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
   document.addEventListener("click", (e) => {
@@ -672,6 +733,36 @@ function wireDropdown(btnId, popoverId) {
 }
 wireDropdown("btn-banks", "banks-popover");
 wireDropdown("btn-sample", "sample-popover");
+
+/* ── Modals (download picker + about) ─────────────────────────
+   `hidden` is set synchronously and the .open class one frame later so the
+   CSS transition has a start state to animate from. Every open/close check
+   reads `hidden`, never the class — a toggle fired inside that one-frame
+   gap would otherwise read a stale class and do nothing. */
+function openModal(modalId, backdropId) {
+  const m = $(modalId), b = $(backdropId);
+  m.hidden = false; b.hidden = false;
+  // setTimeout, not requestAnimationFrame: rAF never fires while the tab is
+  // backgrounded, which would leave the modal un-hidden but stuck at
+  // opacity 0 — visible to the accessibility tree, invisible on screen.
+  setTimeout(() => { m.classList.add("open"); b.classList.add("show"); }, 16);
+}
+function closeModal(modalId, backdropId) {
+  const m = $(modalId), b = $(backdropId);
+  m.classList.remove("open"); b.classList.remove("show");
+  setTimeout(() => { m.hidden = true; b.hidden = true; }, 220);
+}
+$("btn-dl-close").addEventListener("click", () => closeModal("dl-modal", "dl-backdrop"));
+$("dl-backdrop").addEventListener("click", () => closeModal("dl-modal", "dl-backdrop"));
+$("btn-about").addEventListener("click", () =>
+  $("about-modal").hidden ? openModal("about-modal", "about-backdrop") : closeModal("about-modal", "about-backdrop"));
+$("btn-about-close").addEventListener("click", () => closeModal("about-modal", "about-backdrop"));
+$("about-backdrop").addEventListener("click", () => closeModal("about-modal", "about-backdrop"));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("dl-modal").hidden) closeModal("dl-modal", "dl-backdrop");
+  if (!$("about-modal").hidden) closeModal("about-modal", "about-backdrop");
+});
 
 /* Privacy tooltip: :hover/:focus-visible show it via CSS on desktop; this
    adds tap-to-show (with auto-hide) for touch devices, where hover never fires. */
