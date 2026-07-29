@@ -712,28 +712,33 @@ function buildCharts(d) {
    bars. Reported directly: "I click month by month, nothing grows, the
    bars are just present fully."
 
-   A single reset() at construction time isn't enough to fix this: Chart.js
-   has its own built-in ResizeObserver on the canvas, and the results
-   screen going from hidden to visible changes the container's size from
-   0 to real — which fires Chart.js's own instant (non-animated) resize
-   redraw and undoes our reset before the user ever scrolls near it. By
-   the time our own observer's update() runs later, the chart is already
-   sitting at its final values, so there's nothing left to animate FROM —
-   update() runs but produces no visible motion. Fix: reset() again right
-   at the moment of visibility, immediately before update(), so there's
-   always a real zero-to-full transition to see regardless of whatever
-   Chart.js did to the chart in between. */
+   A reset() plus a scroll-triggered replay isn't enough on its own either:
+   Chart.js has its own built-in ResizeObserver, and the results screen
+   going from hidden to visible (container jumps from 0 to real size)
+   fires Chart.js's own instant, non-animated resize redraw — filling the
+   bars to full height while still off-screen. That frame IS briefly on
+   screen the moment the user scrolls it into view, a beat before our own
+   reset()+update() catches up and replays properly — reported as "it
+   quickly goes from already-present bar to growing one."
+
+   Fix: hide the canvas (opacity 0) the instant it's built, before Chart.js
+   gets any chance to draw that premature full frame where anyone could
+   see it, and only reveal it in the same tick as the real reset+animate —
+   so the only thing ever visible is one clean zero-to-full transition. */
 let monthsChartObserver = null;
 function animateMonthsChartOnScroll(chart) {
   monthsChartObserver?.disconnect();
-  chart.reset(); // zero-height bars, no animation — this paint never shows
+  const canvas = $("chart-months");
+  canvas.style.opacity = "0";
+  chart.reset();
   monthsChartObserver = new IntersectionObserver(([entry]) => {
     if (!entry.isIntersecting) return;
-    chart.reset();  // undo any resize-triggered instant fill that happened
-    chart.update();  // while off-screen — so this always has zero to grow from
+    chart.reset();   // undo any resize-triggered instant fill from while
+    canvas.style.opacity = "1";  // it was hidden, then reveal and replay —
+    chart.update();  // this is the only frame sequence anyone ever sees
     monthsChartObserver.disconnect();
   }, { threshold: 0.35 });
-  monthsChartObserver.observe($("chart-months"));
+  monthsChartObserver.observe(canvas);
 }
 
 function renderTable(rows) {
