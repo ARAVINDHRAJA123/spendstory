@@ -675,7 +675,7 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
 .section-nav a:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--card)); box-shadow: 0 3px 14px rgba(0,0,0,.12); transform: translateY(-1px); }
 /* Anchor jumps must clear the sticky topbar + this nav, or the heading
    lands underneath them. */
-#cats-card, #mom-card, #subscription-card, #anomaly-card, #txn-card {
+#cats-card, #mom-card, #months-card, #subscription-card, #anomaly-card, #txn-card {
   scroll-margin-top: calc(var(--topbar-h, 66px) + var(--nav-h, 44px) + 12px);
 }
 
