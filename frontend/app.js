@@ -663,7 +663,7 @@ function buildCharts(d) {
   };
 
   const sortedMonths = monthsSorted(d);
-  charts.push(new Chart($("chart-months"), {
+  const monthsChart = new Chart($("chart-months"), {
     type: "bar",
     data: {
       // Sorted: monthly_summary() emits months in first-seen order, so an
@@ -701,7 +701,30 @@ function buildCharts(d) {
                    callbacks: { label: (c) => ` ${c.dataset.label}: ${INR.format(c.parsed.y)}` } },
       },
     },
-  }));
+  });
+  charts.push(monthsChart);
+  animateMonthsChartOnScroll(monthsChart);
+}
+
+/* The staggered entrance plays the instant the data loads, which is at the
+   TOP of the page — by the time someone scrolls down to actually see this
+   chart, the animation already finished and they just see fully-grown
+   bars. Reported directly: "I click month by month, nothing grows, the
+   bars are just present fully." Fix: snap to the zero state immediately,
+   then replay the real entrance only once the chart scrolls into view.
+   One observer per chart build (theme toggle / category correction call
+   buildCharts() again with a fresh canvas-bound instance), disconnected
+   before creating the next one so they don't pile up over a session. */
+let monthsChartObserver = null;
+function animateMonthsChartOnScroll(chart) {
+  monthsChartObserver?.disconnect();
+  chart.reset(); // zero-height bars, no animation — this paint never shows
+  monthsChartObserver = new IntersectionObserver(([entry]) => {
+    if (!entry.isIntersecting) return;
+    chart.update(); // replays the real entrance, staggered delay included
+    monthsChartObserver.disconnect();
+  }, { threshold: 0.35 });
+  monthsChartObserver.observe($("chart-months"));
 }
 
 function renderTable(rows) {
