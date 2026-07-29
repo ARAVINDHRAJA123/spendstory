@@ -207,7 +207,13 @@
     <div class="card" id="cats-card">
       <h2>Where it went</h2>
       <div class="donut-row">
-        <div class="chart-wrap donut-wrap"><canvas id="chart-cats"></canvas></div>
+        <div class="chart-wrap donut-wrap">
+          <canvas id="chart-cats"></canvas>
+          <div class="donut-center" id="donut-center" aria-hidden="true">
+            <b id="donut-center-value">₹0</b>
+            <small id="donut-center-label">Total spend</small>
+          </div>
+        </div>
         <div class="cat-legend-wrap">
           <p class="cat-legend-hint">Tap a category to show or hide it</p>
           <div id="cat-legend" class="cat-legend"></div>
@@ -281,6 +287,7 @@
       <span id="cat-override-count"></span>
       <button id="btn-reset-cats" class="btn-mini" type="button">Reset all</button>
     </p>
+    <div id="cat-filter-bar" class="cat-filter-bar" role="group" aria-label="Filter by category"></div>
     <input type="search" id="txn-search" placeholder="Search — e.g. swiggy, rent…" aria-label="Search transactions">
     <p id="txn-filter-note" class="txn-filter-note" hidden></p>
     <div class="txn-scroll"><table id="txn-table">

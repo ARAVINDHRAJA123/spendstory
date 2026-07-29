@@ -462,13 +462,31 @@ function render(d) {
   $("stat-spend-card").classList.remove("is-active");
   $("stat-income-card").classList.remove("is-active");
   $("txn-search").value = "";
+  renderCatPills(d);
   applyTxnFilters();
 }
 
 /* KPI cards double as transaction-table filters — click "Money out" to see
    only debits, "Money in" for only credits, click again to clear. Combines
-   with the free-text search rather than replacing it. */
+   with the free-text search and the category pill row rather than
+   replacing either. */
 let activeStatFilter = null; // null | "debit" | "credit"
+let activeCatFilter = null;  // null | a category name
+
+function renderCatPills(d) {
+  const bar = $("cat-filter-bar");
+  const counts = new Map();
+  for (const t of d.transactions) counts.set(t.category, (counts.get(t.category) || 0) + 1);
+  const cats = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  activeCatFilter = null;
+  bar.innerHTML = `<button type="button" class="cat-pill is-active" data-cat="">All</button>` +
+    cats.map(([cat]) => `<button type="button" class="cat-pill" data-cat="${esc(cat)}">${esc(cat)}</button>`).join("");
+  bar.querySelectorAll(".cat-pill").forEach((btn) => btn.addEventListener("click", () => {
+    activeCatFilter = btn.dataset.cat || null;
+    bar.querySelectorAll(".cat-pill").forEach((b) => b.classList.toggle("is-active", b === btn));
+    applyTxnFilters();
+  }));
+}
 
 function applyTxnFilters() {
   const d = lastRenderedData;
@@ -477,6 +495,7 @@ function applyTxnFilters() {
   const filtered = d.transactions.filter((t) => {
     if (activeStatFilter === "debit" && !(t.debit > 0)) return false;
     if (activeStatFilter === "credit" && !(t.credit > 0)) return false;
+    if (activeCatFilter && t.category !== activeCatFilter) return false;
     return (t.merchant + " " + t.category + " " + t.narration).toLowerCase().includes(q);
   });
   renderTable(filtered);
@@ -509,6 +528,21 @@ $("stat-income-card").addEventListener("click", () => toggleStatFilter("credit")
    for the chart data — so colours/labels/order always match exactly.
    Clicking an item toggles that slice via Chart.js's own visibility API,
    same behaviour as the built-in legend, just with a discoverable look. */
+/* index === null resets to the total. Shared by the doughnut's own hover
+   and the HTML legend below it, so both point at the same source of truth. */
+function updateDonutCenter(index, cats, totalSpend) {
+  const val = $("donut-center-value"), label = $("donut-center-label");
+  if (index === null || !cats[index]) {
+    val.textContent = INR.format(totalSpend);
+    label.textContent = "Total spend";
+    return;
+  }
+  const c = cats[index];
+  const pct = totalSpend > 0 ? Math.round((c.spend / totalSpend) * 100) : 0;
+  val.textContent = INR.format(c.spend);
+  label.textContent = `${c.category} · ${pct}%`;
+}
+
 function buildCatLegend(chart, cats) {
   const el = $("cat-legend");
   el.innerHTML = cats.map((c, i) => `
@@ -516,12 +550,28 @@ function buildCatLegend(chart, cats) {
       <span class="cat-legend-swatch" style="background:${PALETTE[i % PALETTE.length]}"></span>
       <span class="cat-legend-label">${esc(c.category)}</span>
     </button>`).join("");
+  const totalSpend = cats.reduce((sum, c) => sum + c.spend, 0);
   el.querySelectorAll(".cat-legend-item").forEach((btn) => {
+    const i = Number(btn.dataset.i);
     btn.addEventListener("click", () => {
-      const i = Number(btn.dataset.i);
       chart.toggleDataVisibility(i);
       chart.update();
       btn.classList.toggle("is-off", !chart.getDataVisibility(i));
+    });
+    // Hovering the legend highlights the same slice the chart itself would
+    // on a direct hover, via Chart.js's own element-active API — so the
+    // two hover paths land on identical visuals instead of two look-alikes
+    // that could quietly drift apart.
+    btn.addEventListener("mouseenter", () => {
+      if (!chart.getDataVisibility(i)) return;
+      chart.setActiveElements([{ datasetIndex: 0, index: i }]);
+      chart.update();
+      updateDonutCenter(i, cats, totalSpend);
+    });
+    btn.addEventListener("mouseleave", () => {
+      chart.setActiveElements([]);
+      chart.update();
+      updateDonutCenter(null, cats, totalSpend);
     });
   });
 }
@@ -558,6 +608,11 @@ function buildCharts(d) {
       cutout: "62%", radius: "88%", maintainAspectRatio: false,
       layout: { padding: 12 },
       animation: { animateRotate: true, duration: 900, easing: "easeOutCubic" },
+      // Redraws the centre label to the hovered slice's own value/share —
+      // Chart.js's hoverOffset already pops the slice out; this is the
+      // other half of that gesture, since a floating tooltip near the edge
+      // is easy to miss but the centre of the ring is always in view.
+      onHover: (_evt, elements) => updateDonutCenter(elements[0]?.index ?? null, cats, totalSpend),
       plugins: {
         // Built-in legend replaced by a real HTML panel below (see
         // buildCatLegend) — a canvas-drawn legend can't be given hover
@@ -573,6 +628,9 @@ function buildCharts(d) {
   });
   charts.push(catChart);
   buildCatLegend(catChart, cats);
+  const totalSpend = cats.reduce((sum, c) => sum + c.spend, 0);
+  updateDonutCenter(null, cats, totalSpend);
+  $("chart-cats").addEventListener("mouseleave", () => updateDonutCenter(null, cats, totalSpend));
 
   const barGradient = (topColor, bottomColor) => (ctx) => {
     const { chartArea } = ctx.chart;
@@ -619,7 +677,15 @@ function buildCharts(d) {
     plugins: [barGlowPlugin],
     options: {
       maintainAspectRatio: false,
-      animation: { duration: 900, easing: "easeOutCubic" },
+      animation: {
+        duration: 900, easing: "easeOutCubic",
+        // Each bar starts a beat after the last — a month-by-month chart
+        // reads left-to-right, so the entrance draws attention the same
+        // direction the eye already scans. Only the initial draw staggers
+        // (ctx.mode !== "resize" excludes the reflow on a theme-toggle
+        // rebuild, which shouldn't replay the whole entrance every time).
+        delay: (ctx) => ctx.type === "data" && ctx.mode !== "resize" ? ctx.dataIndex * 70 + ctx.datasetIndex * 90 : 0,
+      },
       // categoryPercentage/barPercentage: Chart.js defaults pack the two
       // bars in a month flush against each other and nearly fill the slot,
       // which reads as one striped block rather than two values.
@@ -723,7 +789,7 @@ function saveCatOverride(merchant, category) {
   if (lastRenderedData) {
     applyCatOverrides(lastRenderedData);
     buildCharts(lastRenderedData);
-    applyTxnFilters();
+    refreshCatPillsKeepingFilter();
   }
 }
 
@@ -734,9 +800,24 @@ $("btn-reset-cats").addEventListener("click", () => {
   if (lastRenderedData) {
     applyCatOverrides(lastRenderedData);
     buildCharts(lastRenderedData);
-    applyTxnFilters();
+    refreshCatPillsKeepingFilter();
   }
 });
+
+// A correction can rename a category out of existence (0 transactions left
+// in it) or introduce one that wasn't in the pill row before — rebuild the
+// row, but keep the user's active filter selected if that category still
+// has transactions in it, rather than silently resetting to "All".
+function refreshCatPillsKeepingFilter() {
+  const wanted = activeCatFilter;
+  renderCatPills(lastRenderedData);
+  if (wanted && [...lastRenderedData.transactions].some((t) => t.category === wanted)) {
+    activeCatFilter = wanted;
+    $("cat-filter-bar").querySelectorAll(".cat-pill").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.cat === wanted));
+  }
+  applyTxnFilters();
+}
 
 const catMenu = $("cat-menu");
 let catMenuFor = null;
