@@ -710,18 +710,27 @@ function buildCharts(d) {
    TOP of the page — by the time someone scrolls down to actually see this
    chart, the animation already finished and they just see fully-grown
    bars. Reported directly: "I click month by month, nothing grows, the
-   bars are just present fully." Fix: snap to the zero state immediately,
-   then replay the real entrance only once the chart scrolls into view.
-   One observer per chart build (theme toggle / category correction call
-   buildCharts() again with a fresh canvas-bound instance), disconnected
-   before creating the next one so they don't pile up over a session. */
+   bars are just present fully."
+
+   A single reset() at construction time isn't enough to fix this: Chart.js
+   has its own built-in ResizeObserver on the canvas, and the results
+   screen going from hidden to visible changes the container's size from
+   0 to real — which fires Chart.js's own instant (non-animated) resize
+   redraw and undoes our reset before the user ever scrolls near it. By
+   the time our own observer's update() runs later, the chart is already
+   sitting at its final values, so there's nothing left to animate FROM —
+   update() runs but produces no visible motion. Fix: reset() again right
+   at the moment of visibility, immediately before update(), so there's
+   always a real zero-to-full transition to see regardless of whatever
+   Chart.js did to the chart in between. */
 let monthsChartObserver = null;
 function animateMonthsChartOnScroll(chart) {
   monthsChartObserver?.disconnect();
   chart.reset(); // zero-height bars, no animation — this paint never shows
   monthsChartObserver = new IntersectionObserver(([entry]) => {
     if (!entry.isIntersecting) return;
-    chart.update(); // replays the real entrance, staggered delay included
+    chart.reset();  // undo any resize-triggered instant fill that happened
+    chart.update();  // while off-screen — so this always has zero to grow from
     monthsChartObserver.disconnect();
   }, { threshold: 0.35 });
   monthsChartObserver.observe($("chart-months"));
