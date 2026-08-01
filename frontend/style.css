@@ -640,6 +640,45 @@ tbody tr { cursor: default; transition: background .12s ease; }
 tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 tr.flag td { background: color-mix(in srgb, var(--neg) 7%, transparent); }
 tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+
+/* Mobile: 4 fixed-width columns (14/46/24/16%) on a ~340px viewport leaves
+   almost no room per cell — merchant names truncate to a handful of
+   characters and the category chip barely fits its own label. Below
+   560px the table stops being a table (grid on each row instead) and
+   becomes one small card per transaction: merchant name gets a full-width
+   line to itself, date/amount share a row, category sits under its own —
+   the same "list of cards" pattern already used for merchants/anomalies/
+   subscriptions elsewhere on this page. thead is dropped since the grid
+   areas below are self-labelling (date is obviously a date, amount is
+   right-aligned and bold) the way a table header would have been. */
+@media (max-width: 560px) {
+  .txn-scroll { max-height: 60vh; }
+  #txn-table thead { display: none; }
+  #txn-table, #txn-table tbody, #txn-table tr, #txn-table td { display: block; width: auto; }
+  #txn-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "merchant merchant" "date category" "amount amount";
+    row-gap: 5px; column-gap: 10px;
+    padding: 12px 8px; border-top: 1px solid var(--line);
+  }
+  #txn-table tbody tr:first-child { border-top: 0; }
+  #txn-table td {
+    padding: 0; border-top: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #txn-table td:nth-child(1) { grid-area: date; align-self: center; font-size: 12.5px; color: var(--muted); }
+  #txn-table td:nth-child(2) { grid-area: merchant; font-weight: 700; font-size: 15.5px; white-space: normal; }
+  #txn-table td:nth-child(3) { grid-area: category; justify-self: start; align-self: center; }
+  #txn-table td:nth-child(4) { grid-area: amount; justify-self: end; align-self: center; font-size: 16px; }
+  /* The flag tint is normally painted per-<td> (fine on a real table where
+     cells sit flush), which on this grid layout would show as separate
+     patches with gaps between them instead of one solid highlighted card —
+     move it to the row itself and neutralise the per-cell version. */
+  #txn-table tr.flag { background: color-mix(in srgb, var(--neg) 7%, transparent); }
+  #txn-table tr.flag:hover { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+  #txn-table tr.flag td { background: transparent; }
+}
 /* ── Headline band: the page's entry point ── */
 .headline {
   background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, var(--card)), var(--card) 70%);
