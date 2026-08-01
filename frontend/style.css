@@ -82,6 +82,10 @@ body {
    applyTheme() flips --bg synchronously before this class is even needed)
    for the animation's duration sidesteps the compositing gap entirely. */
 .topbar.no-blur { backdrop-filter: none; background: var(--bg); }
+.topbar-tools {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 0 clamp(16px, 4vw, 40px) 10px;
+}
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; color: var(--brand); white-space: nowrap; }
 .topbar-right { position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .privacy-tip-wrap { display: inline-flex; }
@@ -512,13 +516,13 @@ body {
   :root:not([data-theme="light"]) .bank-badge { color: #6FB0FF; background: color-mix(in srgb, #2980F2 22%, transparent); }
 }
 .btn-ghost, .btn-export { white-space: nowrap; }
-/* Narrow screens: three items no longer fit on one line — let the badge
-   and export button share a row under the back link rather than reflowing
-   item-by-item in a way that leaves the back link stranded alone. */
-@media (max-width: 560px) {
-  .results-head { justify-content: flex-start; }
-  #btn-again { flex: 1 1 100%; }
-}
+/* Used to force #btn-again onto its own full-width row here for a 3-item
+   overflow problem (back link + badge + export button all fighting for
+   one line) — the export button moved out into its own card/download
+   modal since, leaving just the back link and badge, which comfortably
+   share one row at every width. The old override was stretching the
+   button's own UA default text-align:center across the full row, which
+   is why it read as centred rather than left-aligned. */
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
 .card {
@@ -532,6 +536,7 @@ body {
 .stat b { display: block; font-size: clamp(22px, 3.2vw, 30px); font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .pos { color: var(--pos); } .neg { color: var(--neg); }
 .stat.filterable {
+  position: relative;
   cursor: pointer; border: 1.5px solid transparent; text-align: left;
   font: inherit; color: inherit; width: 100%;
   transition: border-color .15s ease, transform .1s ease;
@@ -539,6 +544,21 @@ body {
 .stat.filterable:hover { border-color: color-mix(in srgb, var(--brand) 30%, transparent); }
 .stat.filterable:active { transform: scale(.98); }
 .stat.filterable.is-active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
+/* Persistent (not hover-only — hover doesn't exist on touch) affordance
+   that these two cards are buttons, unlike the Net/Transactions cards
+   beside them which look identical otherwise. A small funnel icon plus a
+   micro tap-hint, not a checkbox/switch look, since this is a one-shot
+   filter action, not a toggle-state setting. */
+.filter-hint-ico {
+  position: absolute; top: 12px; right: 12px; color: var(--muted); opacity: .55;
+}
+.filter-hint-text {
+  display: block; margin-top: 7px; font-size: 11px !important; font-weight: 600;
+  color: var(--brand) !important; opacity: .75;
+}
+.stat.filterable.is-active .filter-hint-text { opacity: 1; font-size: 0 !important; }
+.stat.filterable.is-active .filter-hint-text::before { content: "Showing only this — tap to clear"; font-size: 11px; }
+.stat.filterable.is-active .filter-hint-ico { color: var(--brand); opacity: 1; }
 
 /* Mobile: single column, everything scrolls top-to-bottom. Wide viewports:
    auto-fit naturally goes to 2 columns when there's room for both — and

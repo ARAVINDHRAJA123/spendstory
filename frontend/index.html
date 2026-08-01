@@ -29,35 +29,6 @@
     </div>
   </div>
   <div class="topbar-right">
-    <div class="banks-dropdown">
-      <button id="btn-banks" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
-        🏦 Supported banks <span class="caret">▾</span>
-      </button>
-      <div id="banks-popover" class="banks-popover" role="menu" hidden>
-        <div class="banks-popover-title">Auto-detected from your PDF</div>
-        <ul>
-          <li>HDFC Bank</li>
-          <li>State Bank of India</li>
-          <li>Axis Bank</li>
-          <li>Punjab National Bank</li>
-          <li>Indian Overseas Bank</li>
-          <li>City Union Bank</li>
-        </ul>
-      </div>
-    </div>
-    <div class="banks-dropdown">
-      <button id="btn-sample" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
-        🧪 Sample data <span class="caret">▾</span>
-      </button>
-      <div id="sample-popover" class="banks-popover" role="menu" hidden>
-        <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
-        <p class="sample-showcase-label">See the Excel report before you buy:</p>
-        <div class="sample-showcase-links">
-          <a href="samples/SpendStory_Sample_Standard.xlsx" download>📄 Standard sample</a>
-          <a href="samples/SpendStory_Sample_Pro.xlsx" download>🔒 Anonymized (Pro) sample</a>
-        </div>
-      </div>
-    </div>
     <div class="privacy-tip-wrap">
       <button id="btn-privacy" class="btn-privacy" type="button" aria-describedby="privacy-tip">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -76,6 +47,43 @@
     </button>
   </div>
 </header>
+
+<!-- Dropdowns get their own row, separate from the brand/icon-buttons row —
+     "Supported banks"/"Sample data" are wide text buttons that don't fit
+     alongside the wordmark on narrow screens, and wrapping them together
+     with the icon buttons pushed the lock/about icons down onto their own
+     3rd row instead of sitting near "SpendStory" like everything else. -->
+<div class="topbar-tools">
+  <div class="banks-dropdown">
+    <button id="btn-banks" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
+      🏦 Supported banks <span class="caret">▾</span>
+    </button>
+    <div id="banks-popover" class="banks-popover" role="menu" hidden>
+      <div class="banks-popover-title">Auto-detected from your PDF</div>
+      <ul>
+        <li>HDFC Bank</li>
+        <li>State Bank of India</li>
+        <li>Axis Bank</li>
+        <li>Punjab National Bank</li>
+        <li>Indian Overseas Bank</li>
+        <li>City Union Bank</li>
+      </ul>
+    </div>
+  </div>
+  <div class="banks-dropdown">
+    <button id="btn-sample" class="banks-toggle" type="button" aria-expanded="false" aria-haspopup="true">
+      🧪 Sample data <span class="caret">▾</span>
+    </button>
+    <div id="sample-popover" class="banks-popover" role="menu" hidden>
+      <button id="btn-try-sample" class="btn-outline" type="button">▶ Try with sample data</button>
+      <p class="sample-showcase-label">See the Excel report before you buy:</p>
+      <div class="sample-showcase-links">
+        <a href="samples/SpendStory_Sample_Standard.xlsx" download>📄 Standard sample</a>
+        <a href="samples/SpendStory_Sample_Pro.xlsx" download>🔒 Anonymized (Pro) sample</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ── Past analyses drawer (this device only) ── -->
 <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
@@ -198,8 +206,16 @@
   </div>
 
   <section class="cards">
-    <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit"><small>Money out</small><b id="stat-spend" class="neg">₹0</b><span class="spark" id="spark-spend"></span></button>
-    <button class="card stat filterable" id="stat-income-card" type="button" data-filter="credit"><small>Money in</small><b id="stat-income" class="pos">₹0</b><span class="spark" id="spark-income"></span></button>
+    <button class="card stat filterable" id="stat-spend-card" type="button" data-filter="debit">
+      <svg class="filter-hint-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5L4 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <small>Money out</small><b id="stat-spend" class="neg">₹0</b><span class="spark" id="spark-spend"></span>
+      <small class="filter-hint-text">Tap to filter</small>
+    </button>
+    <button class="card stat filterable" id="stat-income-card" type="button" data-filter="credit">
+      <svg class="filter-hint-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5L4 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <small>Money in</small><b id="stat-income" class="pos">₹0</b><span class="spark" id="spark-income"></span>
+      <small class="filter-hint-text">Tap to filter</small>
+    </button>
     <div class="card stat"><small>Net</small><b id="stat-net">₹0</b><span class="spark" id="spark-net"></span></div>
     <div class="card stat"><small>Transactions</small><b id="stat-count">0</b><span class="spark" id="spark-count"></span></div>
   </section>
