@@ -453,9 +453,9 @@ body {
   .trust-item { flex-direction: column; gap: 2px; width: auto; text-align: center; }
   .trust-item small { display: none; }
   .topbar { padding: 10px clamp(14px, 4vw, 40px); }
-  .hero { padding: 4px 0 10px; }
-  .hero h1 { font-size: 22px; }
-  .hero .sub { font-size: 14px; margin-top: 6px; }
+  .hero { padding: 10px 0 14px; }
+  .hero h1 { font-size: 34px; }
+  .hero .sub { font-size: 16px; margin-top: 8px; }
   .dropzone { padding: 14px 18px; }
   .dz-title { font-size: 16px; }
 }
@@ -807,9 +807,26 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
   flex: 1; height: var(--h); border-radius: 5px 5px 0 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--pos) 55%, transparent), color-mix(in srgb, var(--pos) 12%, transparent));
 }
+/* "What you'll get" is a hint of the dashboard, not something worth
+   scrolling past on a phone — shrunk so the dropzone (the actual next
+   action) stays closer to the fold. Placed after the base .peek rules
+   above (same specificity, source order decides the winner regardless
+   of the media query being true — an earlier mobile override here would
+   silently lose to those later, unscoped rules). */
+@media (max-width: 620px) {
+  .preview-peek { margin-top: 14px; }
+  .preview-label { font-size: 10.5px; margin-bottom: 6px; }
+  .peek { padding: 10px; gap: 8px; }
+  .peek-stats { gap: 6px; }
+  .peek-stats span { height: 22px; border-radius: 7px; }
+  .peek-body { gap: 10px; }
+  .peek-lines { gap: 6px; }
+  .peek-lines i { height: 7px; }
+  .peek-bars { height: 40px; gap: 5px; }
+}
 @media (max-width: 480px) {
-  .peek-body { grid-template-columns: 64px 1fr; }
-  .peek-donut { width: 64px; height: 64px; }
+  .peek-body { grid-template-columns: 52px 1fr; }
+  .peek-donut { width: 52px; height: 52px; }
 }
 
 /* ── Month-over-month card ── */
