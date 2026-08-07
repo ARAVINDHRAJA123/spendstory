@@ -62,6 +62,18 @@ def find_recurring_subscriptions(rows: list[dict]) -> list[dict]:
         if r["debit"]:
             debits_by_merchant.setdefault(r["merchant"], []).append((r["date"], r["debit"]))
 
+    # A statement is historical data, not "now" — the right reference point
+    # for "is this still active" is the statement's own most recent
+    # transaction, not today's real-world date. Without this, a merchant
+    # that charged twice early in a long statement and then genuinely
+    # stopped (cancelled, card expired, whatever) still gets a confident
+    # "next ~<date>" prediction landing months in the past relative to the
+    # rest of the statement — which reads as broken to anyone glancing at
+    # a recent statement and seeing a stale date, and inflates the "cancel
+    # these and save" total with a subscription that isn't charging anyone
+    # anymore.
+    statement_end = max((r["date"] for r in rows), default=None)
+
     found = []
     for merchant, occurrences in debits_by_merchant.items():
         if merchant in has_credit or len(occurrences) < 2:
@@ -83,6 +95,10 @@ def find_recurring_subscriptions(rows: list[dict]) -> list[dict]:
 
         avg_gap = round(sum(gaps) / len(gaps))
         last_date, last_amount = occurrences[-1]
+        # 1.5x its own average gap of silence means at least one expected
+        # payment was clearly skipped — this has lapsed, not "upcoming."
+        if statement_end and (statement_end - last_date).days > avg_gap * 1.5:
+            continue
         found.append({
             "merchant": merchant,
             "amount": last_amount,

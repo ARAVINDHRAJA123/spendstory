@@ -192,3 +192,42 @@ def test_zero_previous_value_gives_none_not_error():
     ]
     trend = monthly_trend(monthly)
     assert trend[1]["income_change_pct"] is None
+
+
+def test_lapsed_subscription_excluded_when_statement_has_later_data():
+    # Two Netflix charges early on, then it genuinely stopped — but the
+    # statement keeps going for months afterward (other merchants' rows).
+    # "next ~<date>" landing months in the statement's own past reads as
+    # broken, and it shouldn't inflate the "cancel these and save" total
+    # for something that isn't charging anyone anymore.
+    rows = [
+        row(date(2025, 10, 15), merchant="Netflix", debit=649.0),
+        row(date(2025, 11, 14), merchant="Netflix", debit=649.0),
+        row(date(2026, 6, 1), merchant="Swiggy", debit=300.0),
+        row(date(2026, 8, 1), merchant="Swiggy", debit=50.0),
+    ]
+    found = find_recurring_subscriptions(rows)
+    assert found == []
+
+
+def test_recently_lapsed_subscription_within_grace_window_still_shown():
+    # Only 10 days past its own ~30-day gap by the statement's end — still
+    # plausibly active, not lapsed yet.
+    rows = [
+        row(date(2026, 1, 1), merchant="Netflix", debit=649.0),
+        row(date(2026, 1, 31), merchant="Netflix", debit=649.0),
+        row(date(2026, 3, 12), merchant="Other", debit=10.0),  # statement continues 40 days past last Netflix charge
+    ]
+    found = find_recurring_subscriptions(rows)
+    assert len(found) == 1
+    assert found[0]["merchant"] == "Netflix"
+
+
+def test_subscription_still_active_at_statement_end_is_shown():
+    rows = [
+        row(date(2026, 1, 15), merchant="Netflix", debit=649.0),
+        row(date(2026, 2, 14), merchant="Netflix", debit=649.0),
+        row(date(2026, 3, 16), merchant="Netflix", debit=649.0),  # last row IS the statement end
+    ]
+    found = find_recurring_subscriptions(rows)
+    assert len(found) == 1

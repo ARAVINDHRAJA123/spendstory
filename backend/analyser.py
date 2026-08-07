@@ -883,15 +883,19 @@ def verify_balance_continuity(rows):
     row-by-row chain — a row-by-row check breaks on same-day transactions
     that a PDF's text layer can legitimately return in either order, which
     isn't a parsing bug. The aggregate sum itself is already order-blind;
-    the one place order still mattered was picking a single "last" row's
-    balance as the comparison target — under a same-day tie, a stable sort
-    can put either of two rows last, and they don't have the same balance
+    the one place order still mattered was picking a single specific row's
+    balance as the anchor/target — under a same-day tie, a stable sort can
+    put any of the tied rows first or last, and they don't share a balance
     (each row's balance is its own real, distinct number), so a naive
-    single-row target flagged a correct parse as broken depending on
-    incidental list order. Fixed by accepting a match against ANY balance
-    among the rows sharing that final date, not just whichever happens to
-    land last positionally — confirmed against both orderings of the same
-    same-day pair before trusting this, not assumed correct.
+    single-row anchor flagged a correct parse as broken depending on
+    incidental list order. Fixed symmetrically on both ends: try every row
+    sharing the earliest date as the opening anchor, accept a match against
+    ANY balance among the rows sharing the final date — if the real first-
+    in-order sibling is tried as anchor, the arithmetic comes out right
+    regardless of what order the other same-day rows were extracted in.
+    Confirmed against reversed orderings of both a same-day head tie and a
+    same-day tail tie (including the degenerate case where the whole
+    statement is one single day) before trusting this, not assumed correct.
 
     Returns None (not False) when it can't judge — no balance data, fewer
     than 2 rows — rather than asserting a possibly-wrong "reconciled"
@@ -903,15 +907,24 @@ def verify_balance_continuity(rows):
     if len(dated) < 2:
         return None
     dated.sort(key=lambda r: r["date"])
-    first_balance = dated[0]["balance"]
-    moved = sum(r["credit"] - r["debit"] for r in dated[1:])
-    expected_last = first_balance + moved
+    first_date = dated[0]["date"]
     last_date = dated[-1]["date"]
-    candidate_balances = {r["balance"] for r in dated if r["date"] == last_date}
+    last_balances = {r["balance"] for r in dated if r["date"] == last_date}
+
+    best_diff = None
+    for anchor in dated:
+        if anchor["date"] != first_date:
+            continue
+        moved = sum(r["credit"] - r["debit"] for r in dated if r is not anchor)
+        expected_last = anchor["balance"] + moved
+        for target in last_balances:
+            diff = round(abs(expected_last - target), 2)
+            if best_diff is None or diff < best_diff:
+                best_diff = diff
+
     # ₹1 tolerance: PDFs occasionally truncate paise, and that's not a
     # parsing failure worth alarming anyone over.
-    diff = min(round(abs(expected_last - b), 2) for b in candidate_balances)
-    return {"reconciled": diff <= 1.0, "diff": diff, "checked_rows": len(dated)}
+    return {"reconciled": best_diff <= 1.0, "diff": best_diff, "checked_rows": len(dated)}
 
 
 def top_merchants(rows):

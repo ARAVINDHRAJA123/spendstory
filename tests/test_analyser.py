@@ -444,3 +444,36 @@ def test_balance_continuity_none_when_no_balance_data():
 def test_balance_continuity_none_with_fewer_than_two_rows():
     assert verify_balance_continuity([row(date(2026, 1, 1))]) is None
     assert verify_balance_continuity([]) is None
+
+
+def test_balance_continuity_ignores_same_day_reordering_at_the_head():
+    # Symmetric case to the tail-reordering test above — a tie on the
+    # FIRST date, extracted in either order.
+    a = row(date(2026, 1, 1), debit=0, credit=1000, balance=1000)   # true first
+    b = row(date(2026, 1, 1), debit=100, credit=0, balance=900)     # true second
+    later = row(date(2026, 1, 10), debit=0, credit=50, balance=950)
+    r1 = verify_balance_continuity([a, b, later])
+    r2 = verify_balance_continuity([b, a, later])
+    assert r1["reconciled"] is True
+    assert r2["reconciled"] is True
+
+
+def test_balance_continuity_single_day_statement_reconciles_either_order():
+    # Degenerate case: every transaction shares one date, so "first" and
+    # "last" are the same tied group.
+    a = row(date(2026, 1, 1), debit=0, credit=10, balance=110)   # opening 100, true first
+    b = row(date(2026, 1, 1), debit=5, credit=0, balance=105)    # true second
+    r1 = verify_balance_continuity([a, b])
+    r2 = verify_balance_continuity([b, a])
+    assert r1["reconciled"] is True
+    assert r2["reconciled"] is True
+
+
+def test_balance_continuity_still_catches_a_dropped_transaction_with_head_tie():
+    a = row(date(2026, 1, 1), debit=0, credit=1000, balance=1000)
+    b = row(date(2026, 1, 1), debit=100, credit=0, balance=900)
+    # A later transaction silently missing — the statement continues but
+    # the balance jumps by more than what was actually captured.
+    later = row(date(2026, 1, 20), debit=0, credit=50, balance=1200)  # should be 950 if nothing's missing
+    r = verify_balance_continuity([a, b, later])
+    assert r["reconciled"] is False
