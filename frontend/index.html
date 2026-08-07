@@ -184,6 +184,10 @@
     <span id="bank-badge" class="bank-badge"></span>
   </div>
   <p id="sample-banner" class="sample-banner" hidden>👀 This is sample data — upload your own statement to see your real numbers.</p>
+  <p id="confidence-banner" class="confidence-banner" hidden>
+    ⚠️ <b>We couldn't fully verify this extraction.</b> The running balance in your statement doesn't add up against what we parsed (off by <span id="confidence-diff"></span>) — a page or transaction may have been missed. Numbers below could be incomplete.
+    <button id="btn-confidence-feedback" class="btn-mini" type="button">Help us fix this</button>
+  </p>
 
   <section class="headline" id="headline" hidden>
     <p id="headline-text"></p>

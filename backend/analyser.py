@@ -868,6 +868,52 @@ def category_summary(rows):
         cats[cat]["txn_count"] += 1
     return sorted(cats.values(), key=lambda x: x["spend"], reverse=True)
 
+def verify_balance_continuity(rows):
+    """Self-verification, same spirit as QueryDoctor's optimizer re-running
+    its own rewrites before calling them "fixed": every bank parser already
+    extracts a running balance per row, straight off the statement's own
+    printed numbers — so instead of trusting a parse just because it
+    produced *some* rows, check whether its own arithmetic is internally
+    consistent. If a page got skipped, an amount misread, or the wrong
+    bank's column layout matched, the running balance won't add up, and
+    that's a much stronger signal than "row count looks about right."
+
+    Checks the AGGREGATE delta (first row's balance -> last row's balance
+    against the sum of every credit/debit in between) rather than a strict
+    row-by-row chain — a row-by-row check breaks on same-day transactions
+    that a PDF's text layer can legitimately return in either order, which
+    isn't a parsing bug. The aggregate sum itself is already order-blind;
+    the one place order still mattered was picking a single "last" row's
+    balance as the comparison target — under a same-day tie, a stable sort
+    can put either of two rows last, and they don't have the same balance
+    (each row's balance is its own real, distinct number), so a naive
+    single-row target flagged a correct parse as broken depending on
+    incidental list order. Fixed by accepting a match against ANY balance
+    among the rows sharing that final date, not just whichever happens to
+    land last positionally — confirmed against both orderings of the same
+    same-day pair before trusting this, not assumed correct.
+
+    Returns None (not False) when it can't judge — no balance data, fewer
+    than 2 rows — rather than asserting a possibly-wrong "reconciled"
+    either way. Never called across a multi-file merge: rows from two
+    different accounts (even the same bank) have no reason to share one
+    running balance, so main.py only calls this for a genuine single-file
+    upload."""
+    dated = [r for r in rows if r.get("balance") is not None]
+    if len(dated) < 2:
+        return None
+    dated.sort(key=lambda r: r["date"])
+    first_balance = dated[0]["balance"]
+    moved = sum(r["credit"] - r["debit"] for r in dated[1:])
+    expected_last = first_balance + moved
+    last_date = dated[-1]["date"]
+    candidate_balances = {r["balance"] for r in dated if r["date"] == last_date}
+    # ₹1 tolerance: PDFs occasionally truncate paise, and that's not a
+    # parsing failure worth alarming anyone over.
+    diff = min(round(abs(expected_last - b), 2) for b in candidate_balances)
+    return {"reconciled": diff <= 1.0, "diff": diff, "checked_rows": len(dated)}
+
+
 def top_merchants(rows):
     m = {}
     for r in rows:

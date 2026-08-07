@@ -57,6 +57,7 @@ $("btn-again").addEventListener("click", () => {
   pendingFiles = [];
   isSampleMode = false;
   $("sample-banner").hidden = true;
+  $("confidence-banner").hidden = true;
   $("btn-export").disabled = false;
   $("btn-export").title = "";
   $("mask-toggle").checked = false;
@@ -529,6 +530,15 @@ function render(d) {
   renderOverrideNote();
 
   $("bank-badge").textContent = d.bank === "UNKNOWN" ? "Bank statement" : d.bank + " statement";
+
+  // Self-check, same idea as QueryDoctor's optimizer re-verifying its own
+  // rewrites: the statement's own running balance either adds up against
+  // what we parsed, or it doesn't — and "it doesn't" is a much stronger
+  // signal of a parsing bug than the row count merely looking plausible.
+  const conf = d.parse_confidence;
+  const showWarning = conf && conf.reconciled === false;
+  $("confidence-banner").hidden = !showWarning;
+  if (showWarning) $("confidence-diff").textContent = INR.format(conf.diff);
 
   countUp($("stat-spend"), d.stats.total_spend, (v) => INR.format(v));
   countUp($("stat-income"), d.stats.total_income, (v) => INR.format(v));
@@ -1391,6 +1401,21 @@ $("btn-feedback").addEventListener("click", () => {
 $("btn-feedback-close").addEventListener("click", () => closeModal("feedback-modal", "feedback-backdrop"));
 $("feedback-backdrop").addEventListener("click", () => closeModal("feedback-modal", "feedback-backdrop"));
 
+// "Help us fix this" on the reconciliation-mismatch banner — same modal,
+// pre-filled with exactly the detail that's actually useful for fixing
+// that bank's parser (which bank, how far off), so a report isn't just
+// "it's wrong" with no signal to act on.
+$("btn-confidence-feedback").addEventListener("click", () => {
+  $("feedback-shake-note").hidden = true;
+  feedbackViaShake = false;
+  feedbackType = "Bug report";
+  document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
+  const conf = lastRenderedData?.parse_confidence;
+  const bank = lastRenderedData?.bank || "unknown bank";
+  $("feedback-text").value = `The running balance didn't reconcile for my ${bank} statement (off by ${conf ? INR.format(conf.diff) : "?"}) — a transaction or page may have been missed during parsing.`;
+  openModal("feedback-modal", "feedback-backdrop");
+});
+
 document.querySelectorAll(".feedback-type").forEach((btn) =>
   btn.addEventListener("click", () => {
     feedbackType = btn.dataset.type;
@@ -1399,9 +1424,11 @@ document.querySelectorAll(".feedback-type").forEach((btn) =>
 
 $("btn-feedback-send").addEventListener("click", () => {
   const body = $("feedback-text").value.trim();
+  const conf = lastRenderedData?.parse_confidence;
   const context = [
     `Page: ${location.href}`,
     `Bank(s) analysed: ${lastRenderedData?.bank || "none loaded"}`,
+    `Balance reconciliation: ${conf ? `${conf.reconciled ? "OK" : "MISMATCH"}, diff ${INR.format(conf.diff)}, ${conf.checked_rows} rows checked` : "not checked (multi-file or no balance data)"}`,
     `Screen: ${innerWidth}×${innerHeight}`,
     `UA: ${navigator.userAgent}`,
   ].join("\n");

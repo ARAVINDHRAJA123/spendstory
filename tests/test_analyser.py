@@ -384,3 +384,63 @@ def test_iob_narration_not_misbucketed_as_date_at_boundary():
     rows = _extract_iob(_FakeIOBPDF([_FakeIOBPage(words)]))
     assert len(rows) == 1
     assert rows[0]["narration"] == "BorderlineText"
+
+
+# ── verify_balance_continuity: parsing self-verification ──────────────────
+from analyser import verify_balance_continuity
+
+
+def test_balance_continuity_reconciles_clean_statement():
+    rows = [
+        row(date(2026, 1, 1), debit=0, credit=1000, balance=1000),
+        row(date(2026, 1, 5), debit=200, credit=0, balance=800),
+        row(date(2026, 1, 10), debit=0, credit=50, balance=850),
+    ]
+    r = verify_balance_continuity(rows)
+    assert r["reconciled"] is True
+    assert r["diff"] == 0
+    assert r["checked_rows"] == 3
+
+
+def test_balance_continuity_catches_a_dropped_transaction():
+    # A row silently missing (parser skipped it) makes the running balance
+    # inconsistent with the credits/debits actually captured.
+    rows = [
+        row(date(2026, 1, 1), debit=0, credit=1000, balance=1000),
+        row(date(2026, 1, 10), debit=0, credit=50, balance=850),  # should be 1050 if nothing's missing
+    ]
+    r = verify_balance_continuity(rows)
+    assert r["reconciled"] is False
+    assert r["diff"] == 200
+
+
+def test_balance_continuity_tolerates_paise_rounding():
+    rows = [
+        row(date(2026, 1, 1), debit=0, credit=1000.004, balance=1000.00),
+        row(date(2026, 1, 5), debit=200, credit=0, balance=800.00),
+    ]
+    r = verify_balance_continuity(rows)
+    assert r["reconciled"] is True
+
+
+def test_balance_continuity_ignores_same_day_reordering():
+    # Same-day transactions can legitimately come out of a PDF's text layer
+    # in either order — that's not a parsing bug, and the aggregate check
+    # shouldn't care about order, only totals.
+    a = row(date(2026, 1, 5), debit=100, credit=0, balance=900)
+    b = row(date(2026, 1, 5), debit=0, credit=50, balance=950)
+    opening = row(date(2026, 1, 1), debit=0, credit=1000, balance=1000)
+    r1 = verify_balance_continuity([opening, a, b])
+    r2 = verify_balance_continuity([opening, b, a])
+    assert r1["reconciled"] is True
+    assert r2["reconciled"] is True
+
+
+def test_balance_continuity_none_when_no_balance_data():
+    rows = [row(date(2026, 1, 1), balance=None), row(date(2026, 1, 2), balance=None)]
+    assert verify_balance_continuity(rows) is None
+
+
+def test_balance_continuity_none_with_fewer_than_two_rows():
+    assert verify_balance_continuity([row(date(2026, 1, 1))]) is None
+    assert verify_balance_continuity([]) is None

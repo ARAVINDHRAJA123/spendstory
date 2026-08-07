@@ -34,6 +34,7 @@ from analyser import (  # noqa: E402
     monthly_summary,
     spending_stats,
     top_merchants,
+    verify_balance_continuity,
 )
 from insights import find_recurring_subscriptions, monthly_trend  # noqa: E402
 from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E402
@@ -196,9 +197,15 @@ def _subscription_json(s: dict) -> dict:
 
 
 def _bundle(rows: list[dict], banks: list[str]) -> dict:
+    # Only meaningful for a genuine single-file upload — merged statements
+    # (even two from the same bank) may be two different accounts with no
+    # reason to share one running balance, so this would be as likely to
+    # false-alarm on a correct merge as catch a real parsing bug.
+    confidence = verify_balance_continuity(rows) if len(banks) == 1 else None
     return {
         "bank": " + ".join(dict.fromkeys(banks)) if len(set(banks)) > 1 else (banks[0] if banks else "UNKNOWN"),
         "banks": list(dict.fromkeys(banks)),
+        "parse_confidence": confidence,
         "stats": spending_stats(rows),
         "monthly": monthly_summary(rows),
         "trend": monthly_trend(monthly_summary(rows)),

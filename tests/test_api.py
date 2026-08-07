@@ -171,6 +171,29 @@ def test_analyse_multi_labels_failing_file():
     assert "bad.txt" in r.json()["detail"]
 
 
+def test_bundle_includes_parse_confidence_for_single_file():
+    rows = [
+        {"date": date(2026, 1, 1), "narration": "x", "debit": 0.0, "credit": 1000.0,
+         "balance": 1000.0, "merchant": "m", "category": "c", "is_anomaly": False},
+        {"date": date(2026, 1, 5), "narration": "x", "debit": 200.0, "credit": 0.0,
+         "balance": 800.0, "merchant": "m", "category": "c", "is_anomaly": False},
+    ]
+    bundle = _bundle(rows, ["HDFC"])
+    assert bundle["parse_confidence"] == {"reconciled": True, "diff": 0, "checked_rows": 2}
+
+
+def test_bundle_omits_parse_confidence_for_merged_multi_file():
+    # Two accounts merged (even same bank) have no reason to share one
+    # running balance — checking would be as likely to false-alarm on a
+    # correct merge as catch a real bug.
+    rows = [
+        {"date": date(2026, 1, 1), "narration": "x", "debit": 0.0, "credit": 1000.0,
+         "balance": 1000.0, "merchant": "m", "category": "c", "is_anomaly": False},
+    ]
+    bundle = _bundle(rows, ["HDFC", "SBI"])
+    assert bundle["parse_confidence"] is None
+
+
 def test_bundle_includes_subscriptions_field():
     rows = [
         {"date": date(2026, 1, 15), "narration": "Netflix", "debit": 649.0, "credit": 0.0,
