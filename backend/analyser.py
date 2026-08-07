@@ -927,6 +927,38 @@ def verify_balance_continuity(rows):
     return {"reconciled": best_diff <= 1.0, "diff": best_diff, "checked_rows": len(dated)}
 
 
+def find_first_broken_month(rows) -> str | None:
+    """A mismatch reported as "off by ₹26 somewhere in this statement" isn't
+    actionable — not for the person who paid for it, and not for actually
+    fixing the parser. This narrows it to a specific month by re-running
+    verify_balance_continuity() on successive month-prefixes of the same
+    data: the first month whose PREFIX (everything from the start of the
+    statement through the end of that month) fails to reconcile is where
+    the problem first shows up, since every prefix before it already
+    passed. Deliberately reuses the same, already-tie-robust function as a
+    black box on each prefix rather than a new row-by-row walk, which
+    would reintroduce exactly the same-day-ordering fragility that
+    function was built to avoid.
+
+    Returns None if everything reconciles, or if there's nothing to
+    localize (matches verify_balance_continuity's own None cases)."""
+    dated = [r for r in rows if r.get("balance") is not None]
+    if len(dated) < 2:
+        return None
+    dated.sort(key=lambda r: r["date"])
+    # (year, month) sorts correctly as tuples — the display label
+    # ("Jan 2026") does NOT sort correctly as a string ("Jan" > "Feb"
+    # alphabetically), which is a real bug to not repeat here.
+    month_key = lambda r: (r["date"].year, r["date"].month)
+    months_in_order = sorted({month_key(r) for r in dated})
+    for ym in months_in_order:
+        prefix = [r for r in dated if month_key(r) <= ym]
+        result = verify_balance_continuity(prefix)
+        if result and result["reconciled"] is False:
+            return datetime(ym[0], ym[1], 1).strftime("%b %Y")
+    return None
+
+
 def top_merchants(rows):
     m = {}
     for r in rows:

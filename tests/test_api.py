@@ -330,3 +330,31 @@ def test_unsupported_bank_sample_capped_length(monkeypatch):
     monkeypatch.setattr(pdfplumber, "open", lambda path: _FakePdf(["x" * 5000]))
     sample = _unsupported_bank_sample("fake-path.pdf", max_chars=200)
     assert len(sample) == 200
+
+
+def test_bundle_includes_broken_month_when_mismatched():
+    rows = [
+        {"date": date(2026, 1, 1), "narration": "x", "debit": 0.0, "credit": 1000.0,
+         "balance": 1000.0, "merchant": "m", "category": "c", "is_anomaly": False},
+        {"date": date(2026, 1, 15), "narration": "x", "debit": 100.0, "credit": 0.0,
+         "balance": 900.0, "merchant": "m", "category": "c", "is_anomaly": False},
+        {"date": date(2026, 2, 1), "narration": "x", "debit": 0.0, "credit": 500.0,
+         "balance": 1400.0, "merchant": "m", "category": "c", "is_anomaly": False},
+        {"date": date(2026, 2, 20), "narration": "x", "debit": 226.0, "credit": 0.0,
+         "balance": 1400.0, "merchant": "m", "category": "c", "is_anomaly": False},  # off by 226
+    ]
+    bundle = _bundle(rows, ["HDFC"])
+    assert bundle["parse_confidence"]["reconciled"] is False
+    assert bundle["parse_confidence"]["broken_month"] == "Feb 2026"
+
+
+def test_bundle_omits_broken_month_when_reconciled():
+    rows = [
+        {"date": date(2026, 1, 1), "narration": "x", "debit": 0.0, "credit": 1000.0,
+         "balance": 1000.0, "merchant": "m", "category": "c", "is_anomaly": False},
+        {"date": date(2026, 1, 15), "narration": "x", "debit": 100.0, "credit": 0.0,
+         "balance": 900.0, "merchant": "m", "category": "c", "is_anomaly": False},
+    ]
+    bundle = _bundle(rows, ["HDFC"])
+    assert bundle["parse_confidence"]["reconciled"] is True
+    assert "broken_month" not in bundle["parse_confidence"]

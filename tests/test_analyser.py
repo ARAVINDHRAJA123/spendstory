@@ -477,3 +477,33 @@ def test_balance_continuity_still_catches_a_dropped_transaction_with_head_tie():
     later = row(date(2026, 1, 20), debit=0, credit=50, balance=1200)  # should be 950 if nothing's missing
     r = verify_balance_continuity([a, b, later])
     assert r["reconciled"] is False
+
+
+# ── find_first_broken_month: localizing a mismatch to a specific month ──
+from analyser import find_first_broken_month
+
+
+def test_find_first_broken_month_none_when_everything_reconciles():
+    rows = [
+        row(date(2026, 1, 1), credit=1000, balance=1000),
+        row(date(2026, 2, 1), debit=200, balance=800),
+        row(date(2026, 3, 1), credit=50, balance=850),
+    ]
+    assert find_first_broken_month(rows) is None
+
+
+def test_find_first_broken_month_locates_the_right_month():
+    rows = [
+        row(date(2026, 1, 1), credit=1000, balance=1000),
+        row(date(2026, 1, 15), debit=100, balance=900),
+        row(date(2026, 2, 1), credit=500, balance=1400),
+        row(date(2026, 2, 20), debit=200, balance=1200),
+        row(date(2026, 3, 1), credit=300, balance=1500),
+        row(date(2026, 3, 15), debit=326, balance=1200),  # a transaction's worth missing here
+    ]
+    assert find_first_broken_month(rows) == "Mar 2026"
+
+
+def test_find_first_broken_month_none_with_insufficient_data():
+    assert find_first_broken_month([row(date(2026, 1, 1))]) is None
+    assert find_first_broken_month([]) is None

@@ -547,7 +547,12 @@ function render(d) {
   const conf = d.parse_confidence;
   const showWarning = conf && conf.reconciled === false;
   $("confidence-banner").hidden = !showWarning;
-  if (showWarning) $("confidence-diff").textContent = INR.format(conf.diff);
+  if (showWarning) {
+    $("confidence-diff").textContent = INR.format(conf.diff);
+    const monthEl = $("confidence-month");
+    monthEl.hidden = !conf.broken_month;
+    if (conf.broken_month) monthEl.querySelector("b").textContent = conf.broken_month;
+  }
 
   countUp($("stat-spend"), d.stats.total_spend, (v) => INR.format(v));
   countUp($("stat-income"), d.stats.total_income, (v) => INR.format(v));
@@ -1439,7 +1444,8 @@ $("btn-confidence-feedback").addEventListener("click", () => {
   document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
   const conf = lastRenderedData?.parse_confidence;
   const bank = lastRenderedData?.bank || "unknown bank";
-  $("feedback-text").value = `The running balance didn't reconcile for my ${bank} statement (off by ${conf ? INR.format(conf.diff) : "?"}) — a transaction or page may have been missed during parsing.`;
+  const monthNote = conf?.broken_month ? ` It first shows up around ${conf.broken_month}.` : "";
+  $("feedback-text").value = `The running balance didn't reconcile for my ${bank} statement (off by ${conf ? INR.format(conf.diff) : "?"}) — a transaction or page may have been missed during parsing.${monthNote}`;
   openModal("feedback-modal", "feedback-backdrop");
 });
 
@@ -1455,7 +1461,7 @@ $("btn-feedback-send").addEventListener("click", () => {
   const context = [
     `Page: ${location.href}`,
     `Bank(s) analysed: ${lastRenderedData?.bank || "none loaded"}`,
-    `Balance reconciliation: ${conf ? `${conf.reconciled ? "OK" : "MISMATCH"}, diff ${INR.format(conf.diff)}, ${conf.checked_rows} rows checked` : "not checked (multi-file or no balance data)"}`,
+    `Balance reconciliation: ${conf ? `${conf.reconciled ? "OK" : "MISMATCH"}, diff ${INR.format(conf.diff)}, ${conf.checked_rows} rows checked${conf.broken_month ? `, first breaks around ${conf.broken_month}` : ""}` : "not checked (multi-file or no balance data)"}`,
     `Screen: ${innerWidth}×${innerHeight}`,
     `UA: ${navigator.userAgent}`,
   ].join("\n");

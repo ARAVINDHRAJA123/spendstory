@@ -35,6 +35,7 @@ from analyser import (  # noqa: E402
     spending_stats,
     top_merchants,
     verify_balance_continuity,
+    find_first_broken_month,
     _mask_text,
 )
 from insights import find_recurring_subscriptions, monthly_trend  # noqa: E402
@@ -256,6 +257,12 @@ def _bundle(rows: list[dict], banks: list[str]) -> dict:
     # reason to share one running balance, so this would be as likely to
     # false-alarm on a correct merge as catch a real parsing bug.
     confidence = verify_balance_continuity(rows) if len(banks) == 1 else None
+    # Only worth the extra work when there's actually a mismatch to
+    # localize — this re-checks reconciliation on every month-prefix of
+    # the data, cheap for a normal statement but no reason to run it at
+    # all when the quick aggregate check already passed.
+    if confidence and confidence["reconciled"] is False:
+        confidence["broken_month"] = find_first_broken_month(rows)
     return {
         "bank": " + ".join(dict.fromkeys(banks)) if len(set(banks)) > 1 else (banks[0] if banks else "UNKNOWN"),
         "banks": list(dict.fromkeys(banks)),
