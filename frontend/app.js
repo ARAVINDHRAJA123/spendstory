@@ -1398,6 +1398,14 @@ function onDeviceMotion(e) {
   shakeCount = 0;
   if (now - lastShakeTime < SHAKE_COOLDOWN_MS) return;
   lastShakeTime = now;
+  // iOS's own "Shake to Undo" gesture is native-OS-level — it fires
+  // whenever a text field has focus + edit history and the device is
+  // shaken, entirely independent of this listener; there's no web API to
+  // suppress it (that control only exists for native apps). Blurring
+  // whatever's focused the moment WE detect a shake can't reliably win a
+  // race against an alert already mid-flight, but it's the only lever
+  // available and removes the focused state for next time.
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   if (navigator.vibrate) navigator.vibrate(120);
   $("feedback-shake-note").hidden = false;
   document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
