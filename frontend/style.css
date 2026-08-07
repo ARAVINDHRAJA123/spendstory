@@ -48,6 +48,12 @@
 ::view-transition-old(root) { z-index: 1; }
 
 * { box-sizing: border-box; margin: 0; }
+/* Safety net: the browser's own default link blue (#0000EE-ish) is
+   harsh, especially on a dark background — any <a> that doesn't get a
+   more specific colour rule elsewhere lands here instead of on that
+   default. Sky blue, matching one of the hero gradient's own stops
+   rather than an unrelated new colour. */
+a { color: #38bdf8; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -294,6 +300,7 @@ body {
 }
 .modal-lede { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.55; }
 .modal-foot-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+.modal-foot-note a { color: #38bdf8; font-weight: 700; }
 
 /* ── Format picker ── */
 .fmt-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 9px; }
@@ -397,7 +404,7 @@ body {
   font: inherit; font-weight: 700; color: var(--brand-ink);
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
   border: 0; border-radius: 999px; cursor: pointer;
-  padding: 11px 22px; display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 22px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   box-shadow: 0 4px 18px color-mix(in srgb, var(--brand) 45%, transparent);
   transition: transform .15s ease, box-shadow .15s ease;
   animation: export-pulse 2.6s ease-in-out infinite;
