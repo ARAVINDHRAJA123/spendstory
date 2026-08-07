@@ -35,6 +35,7 @@ from analyser import (  # noqa: E402
     spending_stats,
     top_merchants,
     verify_balance_continuity,
+    _mask_text,
 )
 from insights import find_recurring_subscriptions, monthly_trend  # noqa: E402
 from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E402
@@ -134,6 +135,34 @@ def _txn(r):
     }
 
 
+def _unsupported_bank_sample(pdf_path: str, max_chars: int = 1500) -> str | None:
+    """When no bank layout matched, this is what makes fixing it possible at
+    all: a masked sample of what the PDF's own text actually looks like.
+    Nobody can draft a new parser from "it didn't work" — this is the raw
+    material for it, same idea as the balance-reconciliation check giving
+    the "help us fix this" report something concrete to act on instead of
+    a vague complaint.
+
+    Returns None if the PDF has no meaningful extractable text at all —
+    that's a scanned/image PDF, a real and different problem this sample
+    can't help with, so the caller falls back to that message instead.
+
+    Masked with the same _mask_text() used for the "anonymize" export
+    (long digit runs, UPI handles) before it ever leaves the server — this
+    text only gets returned to the browser at all if the person whose
+    statement it is chooses to include it in a bug report afterward."""
+    try:
+        import pdfplumber as _pp
+        with _pp.open(pdf_path) as pdf:
+            text = " ".join((page.extract_text() or "") for page in pdf.pages[:2])
+    except Exception:
+        return None
+    text = text.strip()
+    if len(text) < 80:
+        return None
+    return _mask_text(text)[:max_chars]
+
+
 def _parse_one(blob: bytes, password: str, label: str = "") -> dict:
     """Validate, decrypt, and parse a single statement PDF. Raises
     HTTPException on any user-facing failure. `label` is only used to make
@@ -168,6 +197,19 @@ def _parse_one(blob: bytes, password: str, label: str = "") -> dict:
         except Exception:
             raise HTTPException(422, f"{prefix}This PDF couldn't be read. It may be damaged — try downloading it from your bank again.")
         if not raw:
+            # Two genuinely different failures were sharing one message:
+            # a real text-based statement from a bank we don't support yet
+            # was being told "this might be a scanned image," which is
+            # simply wrong for that user and gives them no path forward.
+            # Distinguish them by checking whether the PDF has ANY
+            # extractable text at all, independent of whether any bank's
+            # column layout happened to match it.
+            sample = _unsupported_bank_sample(tmp.name)
+            if sample:
+                raise HTTPException(422, {
+                    "message": f"{prefix}We don't recognise this bank's statement format yet.",
+                    "unsupported_bank_sample": sample,
+                })
             raise HTTPException(422, f"{prefix}No transactions found — is this a scanned/image PDF? Only text statements are supported.")
 
         bank = detect_bank(tmp.name)

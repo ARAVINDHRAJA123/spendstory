@@ -25,6 +25,11 @@ function setError(msg) {
   el.textContent = msg || "";
   if (msg) { // restart the shake animation
     el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  } else {
+    // Clearing the error (a fresh attempt starting) — the unsupported-bank
+    // button belongs to whatever error is currently showing, not a stale
+    // one from an earlier attempt.
+    $("btn-unsupported-bank-feedback").hidden = true;
   }
 }
 
@@ -88,6 +93,28 @@ function handleFiles(fileList) {
 /* ── API call ──────────────────────────────────────────────── */
 const LOADING_MSGS = ["Reading your statement…", "Finding your transactions…", "Sorting your spending…", "Almost there…"];
 
+/* A parsing failure's `detail` is either a plain string (the common case —
+   every existing error message) or, only for "we don't recognise this
+   bank," an object carrying a masked text sample alongside the message —
+   the raw material that makes it possible to actually add that bank
+   later, rather than just "it didn't work." Shared by both single- and
+   multi-file analyse so the two don't drift on how they handle it. */
+let lastUnsupportedBankSample = null;
+function handleAnalyseError(body) {
+  show("upload");
+  const detail = body.detail;
+  const isUnsupportedBank = detail && typeof detail === "object" && detail.unsupported_bank_sample;
+  lastUnsupportedBankSample = isUnsupportedBank ? detail.unsupported_bank_sample : null;
+  $("btn-unsupported-bank-feedback").hidden = !isUnsupportedBank;
+  const msg = isUnsupportedBank ? detail.message : (typeof detail === "string" ? detail : "Something went wrong. Please try again.");
+  if (/password/i.test(msg)) {
+    $("password-row").hidden = false;
+    $("trust-strip").hidden = true;
+    $("pdf-password").focus();
+  }
+  setError(msg);
+}
+
 async function analyse(file, password) {
   show("loading");
   let i = 0;
@@ -100,16 +127,7 @@ async function analyse(file, password) {
     const res = await fetch("api/analyse", { method: "POST", body: form });
     const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      show("upload");
-      const msg = body.detail || "Something went wrong. Please try again.";
-      if (/password/i.test(msg)) {
-        $("password-row").hidden = false;
-        $("trust-strip").hidden = true;
-        $("pdf-password").focus();
-      }
-      return setError(msg);
-    }
+    if (!res.ok) return handleAnalyseError(body);
     // Show the screen BEFORE drawing: Chart.js needs visible (non-zero)
     // containers to size the canvases correctly.
     show("results");
@@ -135,16 +153,7 @@ async function analyseMulti(files, password) {
     const res = await fetch("api/analyse-multi", { method: "POST", body: form });
     const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      show("upload");
-      const msg = body.detail || "Something went wrong. Please try again.";
-      if (/password/i.test(msg)) {
-        $("password-row").hidden = false;
-        $("trust-strip").hidden = true;
-        $("pdf-password").focus();
-      }
-      return setError(msg);
-    }
+    if (!res.ok) return handleAnalyseError(body);
     show("results");
     render(body);
     addToHistory(body);
@@ -1395,7 +1404,9 @@ let feedbackViaShake = false;
 $("btn-feedback").addEventListener("click", () => {
   if (!$("feedback-modal").hidden) return closeModal("feedback-modal", "feedback-backdrop");
   $("feedback-shake-note").hidden = true; // only shake-triggered opens show this
+  $("feedback-sample-note").hidden = true; // only the unsupported-bank flow shows this
   feedbackViaShake = false;
+  lastUnsupportedBankSample = null; // don't silently attach a stale sample to an unrelated report
   openModal("feedback-modal", "feedback-backdrop");
 });
 $("btn-feedback-close").addEventListener("click", () => closeModal("feedback-modal", "feedback-backdrop"));
@@ -1405,9 +1416,25 @@ $("feedback-backdrop").addEventListener("click", () => closeModal("feedback-moda
 // pre-filled with exactly the detail that's actually useful for fixing
 // that bank's parser (which bank, how far off), so a report isn't just
 // "it's wrong" with no signal to act on.
+// "Help us add support for your bank" — opens the same feedback modal,
+// pre-filled with a short note; the masked text sample itself (already
+// stripped of long digit runs and UPI handles server-side) rides along
+// in btn-feedback-send's own context block below, not retyped here.
+$("btn-unsupported-bank-feedback").addEventListener("click", () => {
+  $("feedback-shake-note").hidden = true;
+  $("feedback-sample-note").hidden = false;
+  feedbackViaShake = false;
+  feedbackType = "Idea";
+  document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Idea"));
+  $("feedback-text").value = "My bank isn't recognised yet — here's a sample of what my statement's text looks like, to help add support for it:";
+  openModal("feedback-modal", "feedback-backdrop");
+});
+
 $("btn-confidence-feedback").addEventListener("click", () => {
   $("feedback-shake-note").hidden = true;
+  $("feedback-sample-note").hidden = true;
   feedbackViaShake = false;
+  lastUnsupportedBankSample = null;
   feedbackType = "Bug report";
   document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
   const conf = lastRenderedData?.parse_confidence;
@@ -1432,7 +1459,15 @@ $("btn-feedback-send").addEventListener("click", () => {
     `Screen: ${innerWidth}×${innerHeight}`,
     `UA: ${navigator.userAgent}`,
   ].join("\n");
-  const fullBody = `${body}\n\n---\n${context}`;
+  // Capped in the mailto itself (on top of the server's own 1500-char cap)
+  // — mail clients vary in how long a mailto: URL they'll accept, and this
+  // is meant as a starting sample to draft a parser from, not a full
+  // statement dump; the sender can always attach more after their mail
+  // app opens.
+  const sampleBlock = lastUnsupportedBankSample
+    ? `\n\n--- statement text sample (already masked: long digit runs and UPI handles are starred out) ---\n${lastUnsupportedBankSample.slice(0, 1200)}`
+    : "";
+  const fullBody = `${body}\n\n---\n${context}${sampleBlock}`;
   const subject = `SpendStory feedback: ${feedbackType}${feedbackViaShake ? " (via shake)" : ""}`;
   location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
 });
@@ -1473,6 +1508,8 @@ function onDeviceMotion(e) {
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   if (navigator.vibrate) navigator.vibrate(120);
   $("feedback-shake-note").hidden = false;
+  $("feedback-sample-note").hidden = true;
+  lastUnsupportedBankSample = null;
   document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
   feedbackType = "Bug report";
   feedbackViaShake = true;

@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from datetime import date
 
 from fastapi.testclient import TestClient
-from main import _bundle, app
+from main import _bundle, _unsupported_bank_sample, app
 
 client = TestClient(app)
 
@@ -277,3 +277,56 @@ def test_bundle_deduplicates_repeated_formats(monkeypatch):
     # Fails at PDF validation, which is *after* format parsing — proving the
     # dedup path was reached without needing a real statement.
     assert r.status_code == 415
+
+
+# ── Unsupported-bank sample capture ─────────────────────────────────────
+# Two different failures were sharing one message ("scanned/image PDF"),
+# even when the PDF had plenty of real text from a bank we just don't
+# support yet — this is what actually lets that be fixed, by capturing
+# what the text looks like instead of just saying "it didn't work".
+
+class _FakePage:
+    def __init__(self, text):
+        self._text = text
+    def extract_text(self):
+        return self._text
+
+
+class _FakePdf:
+    def __init__(self, pages_text):
+        self.pages = [_FakePage(t) for t in pages_text]
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        return False
+
+
+def test_unsupported_bank_sample_returns_masked_text(monkeypatch):
+    import pdfplumber
+    long_text = "STATEMENT OF ACCOUNT " + "Narration UPI-someone@okhdfc 123456789012 " * 5
+    monkeypatch.setattr(pdfplumber, "open", lambda path: _FakePdf([long_text, ""]))
+    sample = _unsupported_bank_sample("fake-path.pdf")
+    assert sample is not None
+    assert "123456789012" not in sample  # long digit run masked
+    assert "someone@okhdfc" not in sample  # UPI handle masked
+
+
+def test_unsupported_bank_sample_none_when_no_real_text(monkeypatch):
+    import pdfplumber
+    monkeypatch.setattr(pdfplumber, "open", lambda path: _FakePdf(["", None]))
+    assert _unsupported_bank_sample("fake-path.pdf") is None
+
+
+def test_unsupported_bank_sample_none_on_read_failure(monkeypatch):
+    import pdfplumber
+    def boom(path):
+        raise Exception("corrupt")
+    monkeypatch.setattr(pdfplumber, "open", boom)
+    assert _unsupported_bank_sample("fake-path.pdf") is None
+
+
+def test_unsupported_bank_sample_capped_length(monkeypatch):
+    import pdfplumber
+    monkeypatch.setattr(pdfplumber, "open", lambda path: _FakePdf(["x" * 5000]))
+    sample = _unsupported_bank_sample("fake-path.pdf", max_chars=200)
+    assert len(sample) == 200
