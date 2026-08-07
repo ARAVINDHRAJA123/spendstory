@@ -4,7 +4,7 @@
    results must stay in memory only. */
 
 // Bump this on every deploy that changes any SHELL file.
-const CACHE = "spendstory-v30";
+const CACHE = "spendstory-v31";
 const SHELL = [
   ".",
   "index.html",
@@ -44,6 +44,13 @@ const SHELL = [
   "icons/merchants/youtube.svg",
   "icons/merchants/zomato.svg",
   "icons/merchants/zoom.svg",
+  "icons/merchants/hdfcbank.svg",
+  "icons/merchants/icicibank.svg",
+  "icons/merchants/axisbank.svg",
+  "icons/merchants/zerodha.svg",
+  "icons/merchants/indigo.svg",
+  "icons/merchants/paypal.svg",
+  "icons/merchants/razorpay.svg",
 ];
 
 self.addEventListener("install", (e) => {

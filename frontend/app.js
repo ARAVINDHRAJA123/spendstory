@@ -458,12 +458,48 @@ const BRAND_ICONS = [
   { slug: "airbnb", hex: "FF5A5F", match: ["airbnb"] },
   { slug: "oyo", hex: "EE2E24", match: ["oyo"] },
   { slug: "dunzo", hex: "00D290", match: ["dunzo"] },
+  // India-specific additions, safely licensed (Simple Icons, CC0) — banks
+  // and a broker/payments/airline that show up constantly in real Indian
+  // bank statements, found by checking Simple Icons' actual current
+  // registry (see BRAND_COLOR_ONLY's comment below for the merchants that
+  // AREN'T safely available and why).
+  { slug: "hdfcbank", hex: "004B8D", match: ["hdfc"] },
+  { slug: "icicibank", hex: "AE282E", match: ["icici"] },
+  { slug: "axisbank", hex: "971A4D", match: ["axis bank", "axisbank"] },
+  { slug: "zerodha", hex: "387ED1", match: ["zerodha"] },
+  { slug: "indigo", hex: "09009B", match: ["indigo", "goindigo"] },
+  { slug: "paypal", hex: "002991", match: ["paypal"] },
+  { slug: "razorpay", hex: "0C2451", match: ["razorpay"] },
+];
+
+/* Merchants that matter a lot for an Indian audience but have no safely-
+   licensed icon anywhere — Simple Icons doesn't have them, and several
+   (Amazon, Flipkart, LinkedIn, Microsoft, Adobe) were actually REMOVED
+   from Simple Icons' registry, almost certainly over trademark pressure,
+   even though the raw SVGs briefly stayed fetchable from a stale CDN
+   cache (confirmed by checking, not assumed — see the commit that
+   dropped them). Scraping a logo off Google Images and shipping it would
+   be real uncompensated trademark reproduction, not a shortcut.
+   Compromise: their real brand colour (a fact, not artwork) on the
+   initial-letter badge instead of a random hashed one — recognisable
+   without reproducing anyone's logo. Only brands whose colour I'm
+   actually confident is correct are listed; guessing a wrong "brand
+   colour" would be its own kind of dishonest. */
+const BRAND_COLOR_ONLY = [
+  { hex: "FF9900", match: ["amazon"] },
+  { hex: "2874F0", match: ["flipkart"] },
+  { hex: "FF3F6C", match: ["myntra"] },
 ];
 
 function findBrandIcon(merchant) {
   const m = (merchant || "").toLowerCase();
   if (!m) return null;
   return BRAND_ICONS.find((b) => b.match.some((kw) => m.includes(kw))) || null;
+}
+function findBrandColorOnly(merchant) {
+  const m = (merchant || "").toLowerCase();
+  if (!m) return null;
+  return BRAND_COLOR_ONLY.find((b) => b.match.some((kw) => m.includes(kw))) || null;
 }
 
 /* Same colour a merchant always gets across the whole dashboard, chosen
@@ -482,7 +518,9 @@ function merchantBadge(merchant) {
     return `<span class="merchant-badge" style="background:#${icon.hex}"><img src="icons/merchants/${icon.slug}.svg" alt="" width="16" height="16"></span>`;
   }
   const letter = esc((merchant || "?").trim().charAt(0).toUpperCase() || "?");
-  return `<span class="merchant-badge" style="background:${hashColor(merchant || "")}">${letter}</span>`;
+  const colorOnly = findBrandColorOnly(merchant);
+  const bg = colorOnly ? `#${colorOnly.hex}` : hashColor(merchant || "");
+  return `<span class="merchant-badge" style="background:${bg}">${letter}</span>`;
 }
 
 function render(d) {
