@@ -635,6 +635,18 @@ body {
 }
 .anomaly-list li:last-child, .merchant-list li:last-child, .subscription-list li:last-child { border-bottom: 0; }
 .merchant-bar { height: 6px; border-radius: 6px; background: var(--brand); margin-top: 6px; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+/* ── Merchant brand badges ──
+   img brightness(0)+invert(1): Simple Icons ship monochrome (black-fill)
+   SVGs meant to be recoloured by the consumer — an <img> can't be
+   recoloured with `color`/`fill` like an inlined SVG can, so this forces
+   solid black to solid white cheaply, which then sits on the brand's own
+   colour as the badge background. */
+.merchant-badge {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden;
+  color: #fff; font-weight: 800; font-size: 13px;
+}
+.merchant-badge img { filter: brightness(0) invert(1); }
 .m-left { flex: 1; min-width: 0; }
 .m-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .amount { font-weight: 700; white-space: nowrap; }
@@ -655,6 +667,13 @@ col.col-date { width: 14%; } col.col-merchant { width: 46%; }
 col.col-category { width: 24%; } col.col-amount { width: 16%; }
 th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; position: sticky; top: 0; background: var(--card); }
 td { padding: 10px; border-top: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Merchant cell has two children now (badge + name) instead of plain
+   text, so the ellipsis truncation moves from the <td> itself onto the
+   name span — a flex container can't ellipsis its own overflow the way a
+   block with text-overflow does. */
+.td-merchant { display: flex; align-items: center; gap: 8px; }
+.td-merchant .merchant-badge { width: 20px; height: 20px; font-size: 10px; }
+.td-merchant-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 tbody tr { cursor: default; transition: background .12s ease; }
 tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
@@ -689,6 +708,13 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
   }
   #txn-table td:nth-child(1) { grid-area: date; align-self: center; font-size: 12.5px; color: var(--muted); }
   #txn-table td:nth-child(2) { grid-area: merchant; font-weight: 700; font-size: 15.5px; white-space: normal; }
+  /* #txn-table td (line above) forces display:block at higher specificity
+     (id+tag beats .td-merchant's plain class) — restore flex for the badge
+     layout, and let the name wrap onto a 2nd line instead of ellipsis-ing,
+     since the mobile card has vertical room a table row didn't. */
+  #txn-table td.td-merchant { display: flex; align-items: flex-start; }
+  #txn-table td.td-merchant .td-merchant-name { white-space: normal; overflow: visible; text-overflow: clip; }
+  #txn-table td.td-merchant .merchant-badge { margin-top: 1px; }
   #txn-table td:nth-child(3) { grid-area: category; justify-self: start; align-self: center; }
   #txn-table td:nth-child(4) { grid-area: amount; justify-self: end; align-self: center; font-size: 16px; }
   /* The flag tint is normally painted per-<td> (fine on a real table where

@@ -4,7 +4,7 @@
    results must stay in memory only. */
 
 // Bump this on every deploy that changes any SHELL file.
-const CACHE = "spendstory-v25";
+const CACHE = "spendstory-v26";
 const SHELL = [
   ".",
   "index.html",
@@ -14,6 +14,36 @@ const SHELL = [
   "manifest.webmanifest",
   "icons/icon-192.png",
   "icons/icon-512.png",
+  "icons/merchants/airbnb.svg",
+  "icons/merchants/airtel.svg",
+  "icons/merchants/apple.svg",
+  "icons/merchants/bigbasket.svg",
+  "icons/merchants/bookmyshow.svg",
+  "icons/merchants/dropbox.svg",
+  "icons/merchants/dunzo.svg",
+  "icons/merchants/facebook.svg",
+  "icons/merchants/figma.svg",
+  "icons/merchants/github.svg",
+  "icons/merchants/gmail.svg",
+  "icons/merchants/google.svg",
+  "icons/merchants/googlepay.svg",
+  "icons/merchants/ikea.svg",
+  "icons/merchants/instagram.svg",
+  "icons/merchants/jio.svg",
+  "icons/merchants/mcdonalds.svg",
+  "icons/merchants/netflix.svg",
+  "icons/merchants/notion.svg",
+  "icons/merchants/oyo.svg",
+  "icons/merchants/paytm.svg",
+  "icons/merchants/phonepe.svg",
+  "icons/merchants/spotify.svg",
+  "icons/merchants/starbucks.svg",
+  "icons/merchants/swiggy.svg",
+  "icons/merchants/uber.svg",
+  "icons/merchants/whatsapp.svg",
+  "icons/merchants/youtube.svg",
+  "icons/merchants/zomato.svg",
+  "icons/merchants/zoom.svg",
 ];
 
 self.addEventListener("install", (e) => {

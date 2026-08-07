@@ -411,6 +411,80 @@ function countUp(el, target, formatter) {
 
 const PALETTE = ["#8b5cf6", "#d946ef", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16", "#71717a", "#f97316"];
 
+/* ── Merchant brand badges ──────────────────────────────────────
+   A fixed, locally-bundled icon set (frontend/icons/merchants/, from
+   Simple Icons, CC0) — not a live per-merchant fetch to a logo API. That
+   would mean the browser tells a third party which merchants appear in
+   someone's private bank statement, every time the dashboard renders;
+   bundling avoids that entirely and works offline like the rest of this
+   PWA. Only ~30 brands are covered by design — merchant names come from
+   free-text bank-narration parsing (extract_merchant() in analyser.py),
+   an open-ended set no fixed icon library can fully cover. Anything not
+   matched gets a deterministic colour-hashed initial instead of a fake
+   or missing logo — same "say what's actually known" pattern as the
+   category classifier.
+
+   `match` is a short list of how a brand's name actually shows up in a
+   cleaned-up merchant string (title-cased, spaces kept) — not exhaustive,
+   just the obvious variants. */
+const BRAND_ICONS = [
+  { slug: "swiggy", hex: "FC8019", match: ["swiggy"] },
+  { slug: "zomato", hex: "E23744", match: ["zomato"] },
+  { slug: "uber", hex: "000000", match: ["uber"] },
+  { slug: "netflix", hex: "E50914", match: ["netflix"] },
+  { slug: "bigbasket", hex: "A5CD39", match: ["bigbasket", "big basket"] },
+  { slug: "airtel", hex: "E40000", match: ["airtel"] },
+  { slug: "jio", hex: "0A2885", match: ["jio"] },
+  { slug: "paytm", hex: "20336B", match: ["paytm"] },
+  { slug: "phonepe", hex: "5F259F", match: ["phonepe", "phone pe"] },
+  { slug: "googlepay", hex: "4285F4", match: ["google pay", "googlepay", "gpay"] },
+  { slug: "spotify", hex: "1ED760", match: ["spotify"] },
+  { slug: "mcdonalds", hex: "FBC817", match: ["mcdonald"] },
+  { slug: "starbucks", hex: "006241", match: ["starbucks"] },
+  { slug: "ikea", hex: "0058A3", match: ["ikea"] },
+  { slug: "bookmyshow", hex: "C4242B", match: ["bookmyshow", "book my show"] },
+  { slug: "zoom", hex: "0B5CFF", match: ["zoom"] },
+  { slug: "github", hex: "181717", match: ["github"] },
+  { slug: "apple", hex: "000000", match: ["apple"] },
+  { slug: "google", hex: "4285F4", match: ["google"] },
+  { slug: "gmail", hex: "EA4335", match: ["gmail"] },
+  { slug: "whatsapp", hex: "25D366", match: ["whatsapp"] },
+  { slug: "instagram", hex: "FF0069", match: ["instagram"] },
+  { slug: "facebook", hex: "0866FF", match: ["facebook"] },
+  { slug: "youtube", hex: "FF0000", match: ["youtube"] },
+  { slug: "dropbox", hex: "0061FF", match: ["dropbox"] },
+  { slug: "notion", hex: "000000", match: ["notion"] },
+  { slug: "figma", hex: "F24E1E", match: ["figma"] },
+  { slug: "airbnb", hex: "FF5A5F", match: ["airbnb"] },
+  { slug: "oyo", hex: "EE2E24", match: ["oyo"] },
+  { slug: "dunzo", hex: "00D290", match: ["dunzo"] },
+];
+
+function findBrandIcon(merchant) {
+  const m = (merchant || "").toLowerCase();
+  if (!m) return null;
+  return BRAND_ICONS.find((b) => b.match.some((kw) => m.includes(kw))) || null;
+}
+
+/* Same colour a merchant always gets across the whole dashboard, chosen
+   from the app's existing chart PALETTE rather than a random colour per
+   render — a hash of the name, not a counter, so it's stable regardless
+   of list order or which merchants happen to appear in a given statement. */
+function hashColor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
+
+function merchantBadge(merchant) {
+  const icon = findBrandIcon(merchant);
+  if (icon) {
+    return `<span class="merchant-badge" style="background:#${icon.hex}"><img src="icons/merchants/${icon.slug}.svg" alt="" width="16" height="16"></span>`;
+  }
+  const letter = esc((merchant || "?").trim().charAt(0).toUpperCase() || "?");
+  return `<span class="merchant-badge" style="background:${hashColor(merchant || "")}">${letter}</span>`;
+}
+
 function render(d) {
   applyCatOverrides(d);
   lastRenderedData = d;
@@ -431,7 +505,7 @@ function render(d) {
   // is a real result, not an absence worth hiding.
   $("anomaly-empty").hidden = d.anomalies.length > 0;
   $("anomaly-list").innerHTML = d.anomalies.slice(0, 6).map((a) => `
-    <li><div class="m-left"><div class="m-name">${esc(a.merchant)}</div><small class="muted">${fmtDate(a.date)}</small></div>
+    <li>${merchantBadge(a.merchant)}<div class="m-left"><div class="m-name">${esc(a.merchant)}</div><small class="muted">${fmtDate(a.date)}</small></div>
     <span class="amount neg">−${INR.format(a.debit)}</span></li>`).join("");
 
   renderMoM(d);
@@ -445,14 +519,14 @@ function render(d) {
   $("sub-total").hidden = !hasSubs;
   if (hasSubs) renderSubTotal(d.subscriptions);
   $("subscription-list").innerHTML = d.subscriptions.slice(0, 6).map((s) => `
-    <li><div class="m-left"><div class="m-name">${esc(s.merchant)}</div>
+    <li>${merchantBadge(s.merchant)}<div class="m-left"><div class="m-name">${esc(s.merchant)}</div>
     <small class="muted">every ~${s.avg_interval_days}d · next ~${fmtDate(s.next_expected)} · ${INR.format(s.annual_cost)}/yr</small></div>
     <span class="amount neg">−${INR.format(s.amount)}</span></li>`).join("");
 
   // Merchants with proportional bars
   const maxSpend = d.merchants[0]?.total_spend || 1;
   $("merchant-list").innerHTML = d.merchants.map((m) => `
-    <li><div class="m-left"><div class="m-name">${esc(m.merchant)}</div>
+    <li>${merchantBadge(m.merchant)}<div class="m-left"><div class="m-name">${esc(m.merchant)}</div>
     <div class="merchant-bar" style="width:0%" data-w="${(m.total_spend / maxSpend * 100).toFixed(1)}"></div></div>
     <span class="amount">${INR.format(m.total_spend)}</span></li>`).join("");
   requestAnimationFrame(() => requestAnimationFrame(() =>
@@ -745,7 +819,7 @@ function renderTable(rows) {
   $("txn-table").querySelector("tbody").innerHTML = rows.map((t) => `
     <tr class="${t.is_anomaly ? "flag" : ""}">
       <td>${fmtDateShort(t.date)}</td>
-      <td title="${esc(t.narration)}">${esc(t.merchant)}</td>
+      <td class="td-merchant" title="${esc(t.narration)}">${merchantBadge(t.merchant)}<span class="td-merchant-name">${esc(t.merchant)}</span></td>
       <td><button type="button" class="cat-chip cat-chip-btn${CAT_OVERRIDES[catKey(t)] ? " is-overridden" : ""}" data-merchant="${esc(t.merchant)}" data-cat="${esc(t.category)}" title="Tap to change this category">${esc(t.category)}</button></td>
       <td class="num ${t.credit > 0 ? "pos" : "neg"}">${t.credit > 0 ? "+" + INR.format(t.credit) : "−" + INR.format(t.debit)}</td>
     </tr>`).join("");
