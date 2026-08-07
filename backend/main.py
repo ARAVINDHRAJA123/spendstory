@@ -41,15 +41,27 @@ from insights import find_recurring_subscriptions, monthly_trend  # noqa: E402
 from export_accounting import build_tally_xml, build_accounting_csv  # noqa: E402
 import payments  # noqa: E402
 
-MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
+# Same override pattern as MAX_PDF_PAGES below — 15MB default for the
+# public app, raisable via env var only while genuinely needed.
+MAX_UPLOAD_BYTES = int(os.environ.get("SPENDSTORY_MAX_UPLOAD_MB", "15")) * 1024 * 1024
 
 # Temporary QA bypass — set SPENDSTORY_EXPORTS_FREE=true to skip the ₹49
 # paywall entirely on every export endpoint (Excel/Tally/CSV), for testing
 # output quality without paying. Unset (or set to anything else) to restore
 # the normal paid gate — nothing else changes, same code path either way.
 EXPORTS_FREE = os.environ.get("SPENDSTORY_EXPORTS_FREE", "").strip().lower() == "true"
-MAX_PDF_PAGES = 80          # statements rarely exceed this; caps CPU per request
-PARSE_TIMEOUT_S = 60        # a pathological PDF can't hold a worker hostage
+# Same idea, for a genuinely large upload (a full year's worth of
+# statements for an annual audit) — 80 pages is the right default for the
+# public app (caps CPU per request against abuse/accidents), but it's not
+# a hard technical ceiling. Set SPENDSTORY_MAX_PDF_PAGES to raise it only
+# while it's actually needed, then unset — deliberately NOT a permanently
+# higher public default, per the owner's own call: this stays a normal
+# consumer tool for everyone else, not a bulk/annual-audit one.
+MAX_PDF_PAGES = int(os.environ.get("SPENDSTORY_MAX_PDF_PAGES", "80"))
+# Scales with the page cap so a raised limit doesn't just trade "too many
+# pages" for "timed out partway through" — 0.75s/page covers this app's
+# actual per-page parse cost with headroom, floored at the original 60s.
+PARSE_TIMEOUT_S = max(60, int(MAX_PDF_PAGES * 0.75))
 RATE_LIMIT = 20             # analyses per IP per window
 RATE_WINDOW_S = 600
 
