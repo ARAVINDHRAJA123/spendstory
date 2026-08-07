@@ -1334,7 +1334,95 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!$("dl-modal").hidden) closeModal("dl-modal", "dl-backdrop");
   if (!$("about-modal").hidden) closeModal("about-modal", "about-backdrop");
+  if (!$("feedback-modal").hidden) closeModal("feedback-modal", "feedback-backdrop");
 });
+
+/* ── Feedback modal (+ shake-to-report) ─────────────────────────
+   mailto:, not a backend endpoint — no inbox to build, host, or check
+   separately from the address already being read. */
+const FEEDBACK_EMAIL = "aravinth7859@gmail.com";
+let feedbackType = "Bug report";
+let feedbackViaShake = false;
+
+$("btn-feedback").addEventListener("click", () => {
+  if (!$("feedback-modal").hidden) return closeModal("feedback-modal", "feedback-backdrop");
+  $("feedback-shake-note").hidden = true; // only shake-triggered opens show this
+  feedbackViaShake = false;
+  openModal("feedback-modal", "feedback-backdrop");
+});
+$("btn-feedback-close").addEventListener("click", () => closeModal("feedback-modal", "feedback-backdrop"));
+$("feedback-backdrop").addEventListener("click", () => closeModal("feedback-modal", "feedback-backdrop"));
+
+document.querySelectorAll(".feedback-type").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    feedbackType = btn.dataset.type;
+    document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b === btn));
+  }));
+
+$("btn-feedback-send").addEventListener("click", () => {
+  const body = $("feedback-text").value.trim();
+  const context = [
+    `Page: ${location.href}`,
+    `Bank(s) analysed: ${lastRenderedData?.bank || "none loaded"}`,
+    `Screen: ${innerWidth}×${innerHeight}`,
+    `UA: ${navigator.userAgent}`,
+  ].join("\n");
+  const fullBody = `${body}\n\n---\n${context}`;
+  const subject = `SpendStory feedback: ${feedbackType}${feedbackViaShake ? " (via shake)" : ""}`;
+  location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
+});
+
+/* Shake-to-report: a real, if blunt, "something's wrong" signal on a phone
+   — no separate bug-report flow, it just opens this same modal with
+   context pre-attached. iOS 13+ gates DeviceMotionEvent behind an explicit
+   permission prompt that can only be requested from a user gesture, so it's
+   requested lazily on first tap rather than a jarring prompt on page load;
+   everywhere else (Android, desktop) has no such gate and just works. */
+let shakeReady = false, lastShakeTime = 0, lastMagnitude = 0, shakeCount = 0, shakeWindowStart = 0;
+const SHAKE_THRESHOLD = 15;   // m/s² delta between readings
+const SHAKE_COUNT_NEEDED = 3; // this many spikes...
+const SHAKE_WINDOW_MS = 1200; // ...within this long
+const SHAKE_COOLDOWN_MS = 4000; // don't re-trigger immediately after firing
+
+function onDeviceMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x === null) return;
+  const now = Date.now();
+  const magnitude = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+  const delta = Math.abs(magnitude - lastMagnitude);
+  lastMagnitude = magnitude;
+  if (delta < SHAKE_THRESHOLD) return;
+  if (now - shakeWindowStart > SHAKE_WINDOW_MS) { shakeWindowStart = now; shakeCount = 0; }
+  shakeCount++;
+  if (shakeCount < SHAKE_COUNT_NEEDED) return;
+  shakeCount = 0;
+  if (now - lastShakeTime < SHAKE_COOLDOWN_MS) return;
+  lastShakeTime = now;
+  if (navigator.vibrate) navigator.vibrate(120);
+  $("feedback-shake-note").hidden = false;
+  document.querySelectorAll(".feedback-type").forEach((b) => b.classList.toggle("is-active", b.dataset.type === "Bug report"));
+  feedbackType = "Bug report";
+  feedbackViaShake = true;
+  if ($("feedback-modal").hidden) openModal("feedback-modal", "feedback-backdrop");
+  $("feedback-text").focus();
+}
+function enableShakeToReport() {
+  if (shakeReady) return;
+  shakeReady = true;
+  window.addEventListener("devicemotion", onDeviceMotion);
+}
+// requestPermission only exists on iOS 13+ Safari; everywhere else just
+// attach directly. Never prompt more than once per page load.
+let shakePermissionAsked = false;
+document.addEventListener("click", function askShakePermissionOnce() {
+  if (shakePermissionAsked) return;
+  shakePermissionAsked = true;
+  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+    DeviceMotionEvent.requestPermission().then((state) => { if (state === "granted") enableShakeToReport(); }).catch(() => {});
+  } else if (typeof DeviceMotionEvent !== "undefined") {
+    enableShakeToReport();
+  }
+}, { once: true });
 
 /* Privacy tooltip: :hover/:focus-visible show it via CSS on desktop; this
    adds tap-to-show (with auto-hide) for touch devices, where hover never fires. */
