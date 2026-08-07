@@ -949,7 +949,7 @@ tr.flag:hover td { background: color-mix(in srgb, var(--neg) 12%, transparent); 
 .feedback-type:hover { color: var(--ink); }
 .feedback-type.is-active { color: var(--brand); border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
 .feedback-textarea {
-  width: 100%; min-height: 100px; font: inherit; font-size: 15px;
+  width: 100%; min-height: 100px; font: inherit; font-size: 16px;
   padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px;
   background: var(--bg); color: var(--ink); resize: vertical;
   margin-bottom: 4px;

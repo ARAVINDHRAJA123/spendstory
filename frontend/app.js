@@ -1404,7 +1404,14 @@ function onDeviceMotion(e) {
   feedbackType = "Bug report";
   feedbackViaShake = true;
   if ($("feedback-modal").hidden) openModal("feedback-modal", "feedback-backdrop");
-  $("feedback-text").focus();
+  // Deliberately NOT auto-focusing the textarea here: iOS has its own
+  // built-in "Shake to Undo" gesture tied to any focused editable field,
+  // completely separate from our JS — focusing right as a shake is
+  // detected (residual physical motion often continues a beat after our
+  // threshold fires) puts a text field into focus exactly while that
+  // system gesture is still watching, and iOS pops its own "Undo Typing"
+  // dialog on top of ours. Leaving focus alone avoids the conflict
+  // entirely; the user can tap the box themselves when ready to type.
 }
 function enableShakeToReport() {
   if (shakeReady) return;
